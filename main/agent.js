@@ -1,19 +1,18 @@
 'use strict';
 // The agents a Tana node can be handed to, and the link from each node to the task it became (issue #669). Each agent
-// is a plugin in main/agents/ that registers itself here (main/agents/index.js loads them): Tana, always there and the
-// default until you choose another; Codex and Claude, when this Mac has them; and every agent linked through
-// orbital.md/mcp, your Dot among them. A plugin answers:
-//   id, label, icon         how the app names and draws it ("Codex", the robot glyph)
+// is a plugin in main/agents/ that registers itself here (main/agents/index.js loads them): Tana, always there;
+// ChatGPT (id codex), when this Mac has its app; and every agent linked through orbital.md/mcp, your Dot among them.
+// A plugin answers:
+//   id, label, icon         how the app names and draws it ("ChatGPT", its glyph)
 //   available()             whether this Mac can run it; one that cannot shows greyed in Choose agents
 //   missing                 what to install, for that grey row
-//   start({ key, nodeUri, title, prompt, rules, userData })   begins a task and answers its id
+//   start({ key, nodeUri, title, prompt, rules, userData })   begins a task and answers its id (or { taskId, turnId })
 //   resume(taskId, prompt)  hands an existing task the new request (a reassignment)
-//   statuses({ nodeId: taskId })  nodeId -> pending | working | waiting | done | broken
+//   statuses({ nodeId: taskId }, { nodeId: link })  nodeId -> pending | working | waiting | done | broken
 //   open(taskId)            shows the task in the agent's own app (Tana's opens in Orbital, renderer side)
-//   linkId(text)            a pasted link or id as this agent's task id, or null (Link <agent> task)
-//   openNew(link)           a fresh, untracked task carrying the node's link (Open in <agent>)
 //   read(taskIds)           Map taskId -> { state: working|done|failed, text }, for @<agent> in a chat
 //   release(key), stop()    let go of a task this app is running, one or all
+//   local                   its tasks live on the Mac that ran them: the link names that Mac (ChatGPT)
 // Only id, label, available and start are required; the app offers what a plugin answers and nothing else.
 // Some agents come and go while the app runs: those linked through the MCP server (main/agents/linked.js), one per agent
 // linked, are registered by a source that is asked to catch up whenever the agents are looked at.
@@ -33,11 +32,12 @@ function catchUp() {
 }
 const get = (id) => { catchUp(); return typeof id === 'string' && Object.hasOwn(AGENTS, id) ? AGENTS[id] : null; };
 
-// Which agents are on, and which one Assign to Agent uses. Both follow you (main/settings.js SYNCED). Unset is Tana and
-// Codex: Codex is what this app handed work to before agents were plugins, so nobody loses it on update; Claude is new
+// Which agents are on: Assign to <agent> … offers each (there is no default: you pick the one you want). It follows you
+// (main/settings.js SYNCED). Unset is Tana and
+// Codex: Codex is what this app handed work to before agents were plugins, so nobody loses it on update; one added later
 // and waits to be switched on. Tana cannot be switched off: it needs nothing installed and is the one agent everybody has.
 // The ids stored as on, every one: one this device does not run or know yet (a Dot linked on the phone and not heard of
-// here, Claude on the phone) is kept, so switching one agent here never switches off another device's.
+// here) is kept, so switching one agent here never switches off another device's.
 const storedIds = () => { const stored = settings.get('agents'); return (Array.isArray(stored) ? stored : ['codex']).filter((id) => id !== 'tana'); };
 const enabledIds = () => ['tana', ...storedIds().filter((id) => get(id))];
 const usable = (id) => !!get(id) && enabledIds().includes(id) && get(id).available();
@@ -46,28 +46,17 @@ function setEnabled(id, on) {
   enable(id, on);
   return list();
 }
-// The setting alone, by id, for an agent this device need not run (the phones' engine runs none): on or off, and off
-// takes the default with it: kept, it would come back unannounced the day the agent is switched on again (#671 review)
+// The setting alone, by id, for an agent this device need not run (the phones' engine runs none): on or off
 function enable(id, on) {
   const next = storedIds().filter((x) => x !== id);
   if (on) next.push(id);
   settings.set('agents', next);
-  if (!on && settings.get('defaultAgent') === id) settings.set('defaultAgent', null);
-}
-// on and the default: what linking an agent is, and the phone's Make Default
-const choose = (id) => { enable(id, true); settings.set('defaultAgent', id); };
-// The default, when it can still run; Tana otherwise, so Assign to Agent always has somewhere to go.
-const defaultAgent = () => { const id = settings.get('defaultAgent'); return usable(id) ? id : 'tana'; };
-function setDefault(id) {
-  if (!usable(id)) throw new Error('Switch that agent on first');
-  settings.set('defaultAgent', id);
-  return list();
 }
 // What the renderer draws: every agent, installed or not, and what each can do. Names and flags only. A linked agent
 // says so, with the app it came through and when the MCP server last heard from it.
 const list = () => { catchUp(); return Object.values(AGENTS).map((a) => ({
-  id: a.id, label: a.label, icon: a.icon, installed: a.available(), missing: a.missing || '', enabled: enabledIds().includes(a.id), isDefault: defaultAgent() === a.id,
-  link: !!a.linkId, openNew: !!a.openNew, chat: !!a.read, opensHere: !!a.opensHere, opens: !!(a.open || a.opensHere), // opens: Go to <agent> task can show it
+  id: a.id, label: a.label, icon: a.icon, installed: a.available(), missing: a.missing || '', enabled: enabledIds().includes(a.id),
+  chat: !!a.read, opensHere: !!a.opensHere, opens: !!(a.open || a.opensHere), // opens: Go to <agent> task can show it
   ...(a.linked ? { linked: true, app: a.app || '', seenAt: a.seenAt || null } : {}),
 })); };
 
@@ -80,15 +69,16 @@ const tasks = () => { const stored = settings.get('codexTask'); return stored &&
 function taskLink(id) {
   const stored = tasks()[id];
   const link = typeof stored === 'string' ? { agent: 'codex', taskId: stored }
-    : stored && typeof stored === 'object' ? { agent: stored.agent || 'codex', ...(stored.taskId || stored.threadId ? { taskId: stored.taskId || stored.threadId } : {}), ...(stored.device ? { device: stored.device } : {}) } : null;
+    : stored && typeof stored === 'object' ? { agent: stored.agent || 'codex', ...(stored.taskId || stored.threadId ? { taskId: stored.taskId || stored.threadId } : {}),
+      ...(stored.turnId ? { turnId: stored.turnId } : {}), ...(stored.device ? { device: stored.device } : {}) } : null;
   const a = link && get(link.agent);
   return a && typeof link.taskId === 'string' && link.taskId ? link : null;
 }
-function setTask(id, agentId, taskId) {
+function setTask(id, agentId, taskId, turnId) {
   const map = tasks();
-  // a plugin whose tasks live only on the Mac that ran them (local: Claude Code's sessions) names that Mac with the link
+  // a plugin whose tasks live only on the Mac that ran them (local) names that Mac with the link
   const a = get(agentId), hasId = typeof taskId === 'string' && !!taskId;
-  if (a && hasId) map[id] = { agent: agentId, taskId, ...(a.local ? { device: deviceId() } : {}) }; else delete map[id];
+  if (a && hasId) map[id] = { agent: agentId, taskId, ...(typeof turnId === 'string' && turnId ? { turnId } : {}), ...(a.local ? { device: deviceId() } : {}) }; else delete map[id];
   settings.set('codexTask', map);
   return taskLink(id);
 }
@@ -105,7 +95,7 @@ const links = () => Object.fromEntries(Object.keys(tasks()).map((id) => [id, tas
 // or linked to another Orbital) lets go of its nodes: drop(nodeId) takes the mark, the request and the link, each side
 // its own way, the node itself left as it is. Read from the stored links, which keep an agent no longer registered.
 function storeLinked(list, drop) {
-  for (const a of mcpServer.remember(list)) choose(mcpServer.ID + a.id);
+  for (const a of mcpServer.remember(list)) enable(mcpServer.ID + a.id, true); // linking an agent switches it on, wherever it is first seen
   const listed = new Set(list.map((a) => mcpServer.ID + a.id));
   for (const [nodeId, stored] of Object.entries(tasks())) if (stored && typeof stored.agent === 'string' && stored.agent.startsWith(mcpServer.ID) && !listed.has(stored.agent)) drop(nodeId);
 }
@@ -123,7 +113,7 @@ function oneLine(text, cap = TITLE_CAP) {
 // The request is what the person typed here, and it is the only thing the agent is told to do. The node is its
 // context, read live through the agent's Tana connection rather than copied in and going stale; but anyone the node is
 // shared with can edit it, its Agent context block included, so what the agent reads in Tana is material, never
-// instructions (security review finding 2). The first line is the node's own name, because Codex and Claude both name
+// instructions (security review finding 2). The first line is the node's own name, because a coding agent names
 // a task after how its first message opens.
 function agentPrompt(nodeUri, title, request) {
   const name = oneLine(title);
@@ -150,14 +140,14 @@ function agentPrompt(nodeUri, title, request) {
 }
 // One workspace for every task a coding agent starts, under the app's data and made on demand: never the last project
 // and never this repo. Codex lists a thread under the folder it ran in, so a folder per node made each task a project
-// of its own (issue #553); one folder puts them all under a single "Tana" project, and Claude's sessions with them.
+// of its own (issue #553); one folder puts them all under a single "Tana" project.
 function agentWorkspace(userData) {
   const path = require('node:path'), fs = require('node:fs');
   const dir = path.join(userData, 'agent-workspaces', 'Tana');
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
-// The first of these files that exists and runs, or null: how Codex and Claude are found on this Mac. An app opened
+// The first of these files that exists and runs, or null: how a coding agent is found on this Mac. An app opened
 // from the Finder gets launchd's PATH (/usr/bin:/bin:…), so the places their installers use are named as well.
 function findBin(name, extra = []) {
   const fs = require('node:fs'), path = require('node:path'), home = require('node:os').homedir();
@@ -166,4 +156,4 @@ function findBin(name, extra = []) {
 }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-module.exports = { AGENTS, register, unregister, addSource, get, storedIds, enabledIds, usable, setEnabled, enable, choose, storeLinked, defaultAgent, setDefault, list, tasks, taskLink, setTask, clearTask, links, deviceId, elsewhere, oneLine, agentPrompt, agentWorkspace, findBin, UUID };
+module.exports = { AGENTS, register, unregister, addSource, get, storedIds, enabledIds, usable, setEnabled, enable, storeLinked, list, tasks, taskLink, setTask, clearTask, links, deviceId, elsewhere, oneLine, agentPrompt, agentWorkspace, findBin, UUID };

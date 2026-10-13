@@ -106,7 +106,7 @@ function chatgptRow(c) {
   if (c.installing) return at(null, 'Getting ChatGPT sign-in ready…');
   if (c.loggingIn) return at([button('copyCode', 'Copy Code', () => navigator.clipboard.writeText(c.userCode)), button('cancelLogin', 'Cancel', () => load('chatgpt', host.chatgptCancel))], 'Enter ' + c.userCode + ' in your browser');
   if (c.signedIn) return at(button('chatgpt', 'Sign Out', () => load('chatgpt', host.chatgptLogout)), (c.email ? demoText(c.email, 'chatgpt') : 'Signed in') + ' · ' + HERE);
-  if (c.available === false) return at(null, c.error || 'Codex CLI unavailable', true);
+  if (c.available === false) return at(null, c.error || 'Install the ChatGPT app to sign in', true);
   return at(button('chatgpt', 'Sign In…', () => load('chatgpt', async () => {
     const r = await host.chatgptLogin(); // opens the browser; the code to enter there shows on this row
     return r.userCode ? { ...st.chatgpt, available: true, signedIn: false, loggingIn: true, userCode: r.userCode, error: null } : r;
@@ -143,10 +143,21 @@ function hiddenList() {
   return r;
 }
 function unhide(pattern) { if (pattern == null) return; hiddenPick = null; load('hidden', () => host.removeFilter(pattern)); }
+// Under your linked agents: what you send them goes through the Orbital MCP server, and whose that is (renderer/agent.js relayWords)
+function relayRow(w) {
+  const host = String((w && w.url) || 'https://orbital.md/mcp').replace(/^https?:\/\//, '').replace(/\/.*$/, ''), ours = !(w && w.workspace) && host === 'orbital.md';
+  return row('mcp', 'Goes through ' + host + (ours ? ', Orbital\'s relay, run by us' : w && w.workspace ? ', your workspace\'s own server' : ''), null,
+    'Each handover to your linked agents passes through it' + (ours ? '. Host your own Orbital MCP server to keep it in your workspace.' : '.'), true);
+}
 function agentRows(a) {
   const flip = () => load('agents', () => host.enableAgent(a.id, !a.enabled));
+  // a linked agent (your Dot) can be unlinked here, as on its ⌘K page: asked first, since its nodes are unassigned with it
+  const unlink = a.linked && host.mcpUnlink && !demoMode ? // unlinking writes to the nodes handed to it: not in demo mode, as the outliner refuses it there
+    [button('unlink/' + a.id, 'Unlink', () => {
+    if (confirm('Unlink ' + a.label + '? It can no longer take tasks from Orbital, and the nodes handed to it are unassigned.')) load('agents', () => host.mcpUnlink(a.id));
+  })] : [];
   // not installed here only stops switching it on: one switched on at another Mac (the choice follows you) can be switched off here
-  return [row(a.icon, a.label, toggle('agent/' + a.id, a.label, a.enabled, flip, a.id === 'tana' || (!a.installed && !a.enabled)),
+  return [row(a.icon, a.label, [...unlink, toggle('agent/' + a.id, a.label, a.enabled, flip, a.id === 'tana' || (!a.installed && !a.enabled))],
     a.id === 'tana' ? 'Always on' : !a.installed ? a.missing || 'Not installed' : null, !a.installed)];
 }
 const SECTIONS = {
@@ -177,17 +188,14 @@ const SECTIONS = {
     return out;
   },
   agents: () => {
-    const list = st.agents || [], on = list.filter((a) => a.enabled && a.installed), pick = (on.find((a) => a.isDefault) || on[0])?.id;
-    const choose = popup('defaultAgent', 'Default agent', pick, on.map((a) => [a.id, a.label]), (v) => load('agents', () => host.setDefaultAgent(v)));
-    choose.disabled = on.length < 2;
+    const list = st.agents || [];
     return [
-      ...group('Agents', 'who a node can be handed to', list.flatMap(agentRows)),
-      ...group(null, null, list.length ? [row('robot', 'Default agent', choose, 'Assign to Agent starts with it')] : []),
+      ...group('Agents', 'who a node can be handed to', [...list.flatMap(agentRows), row('robot', 'Claude', null, 'Coming soon', true), ...(list.some((a) => a.linked) ? [relayRow(st.org)] : [])]), // Claude: to come back properly; renderer/agent.js says the same
     ];
   },
   lists: () => [
     ...group('Hidden titles', null, host.filters ? [hiddenList()] : []),
-    ...group('Chats', null, host.setMcpHidden ? [row('robot', 'Show MCP chats', toggle('mcp', 'Show MCP chats', !st.mcpHidden, () => load('mcpHidden', () => host.setMcpHidden(!st.mcpHidden)), st.mcpHidden == null), 'Chats an MCP client started')] : []),
+    ...group('Chats', null, host.setMcpHidden ? [row('robot', 'Show chats made by tools', toggle('mcp', 'Show chats made by tools', !st.mcpHidden, () => load('mcpHidden', () => host.setMcpHidden(!st.mcpHidden)), st.mcpHidden == null), 'Tana chats an MCP tool started')] : []),
   ],
   // what is the same for everyone in the Tana workspace, as ⌘K Open Orbital Settings for Tana Workspace sets it
   // (renderer/agent.js): kept on the workspace's own document, and written by an admin only (main/settings.js setWorkspace)
@@ -203,9 +211,9 @@ const SECTIONS = {
     banner.append(icon, words);
     return [
       banner,
-      ...group('Orbital MCP server', 'where every handover goes', [
+      ...group('Orbital MCP server', 'what you send your agents goes through it: every handover', [
         row('mcp', 'Server URL', field('org/url', 'Orbital MCP server URL', w.workspace, w.fallback || 'https://orbital.md/mcp', async (v) => { const now = await host.mcpUse(v); load('agents', host.agentList); return now; }),
-          w.outdated ? 'Out of date: version ' + w.version + ', and Orbital needs ' + w.needed : w.workspace ? 'Your workspace\'s own · agents link again after a change' : 'Empty: orbital.md'),
+          w.outdated ? 'Out of date: version ' + w.version + ', and Orbital needs ' + w.needed : w.workspace ? 'Your workspace\'s own · agents link again after a change' : 'Empty: orbital.md, Orbital\'s relay, run by us · host your own to keep it in your workspace'),
         row('prompt', 'Host your own', button('deploy', 'Copy Instructions', copy(w.deploy)), 'ChatGPT deploys it on Sites and gives you the URL to paste above'),
         ...(w.outdated && w.workspace ? [row('prompt', 'Update it', button('update', 'Copy Instructions', copy(w.update)), 'The latest code in the same Site, at the same address')] : []),
       ]),

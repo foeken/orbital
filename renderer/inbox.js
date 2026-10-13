@@ -53,7 +53,7 @@ function openNotification(node) {
 }
 // Cmd+K: the place, among the Views, with how much is waiting there
 function notificationsViewRow() {
-  return { id: 'notifications', group: 'Views', icon: 'notify', label: 'Notifications', hint: inboxUnread ? inboxUnread + ' unread' : '', run: () => goTo(INBOX_PAGE) };
+  return { id: 'notifications', group: 'Views', icon: 'notify', label: 'Notifications', hint: inboxUnread ? inboxUnread + ' unread' : '', opens: INBOX_PAGE, run: () => goTo(INBOX_PAGE) };
 }
 // Cmd+K: the notifications selected, or the one the caret was on when the palette opened (or is on now, for a key
 // pressed with the palette closed). Two rows with a fixed meaning each rather than one whose label flips, so either

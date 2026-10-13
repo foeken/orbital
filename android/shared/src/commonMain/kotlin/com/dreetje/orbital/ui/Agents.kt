@@ -66,7 +66,17 @@ import kotlinx.coroutines.launch
 // what can be handed to an agent: a node of yours, not a chat, a search or a person
 fun handable(id: String): Boolean = id.startsWith("tana:") && kindOf(id) !in listOf("chat", "search", "user-profile")
 
-// Settings' Agents: each agent linked through orbital.md, by the name it gave itself, swiped right to make it the default
+// What goes through the Orbital MCP server, as the Mac says it (renderer/agent.js relayWords; ios/Orbital/Agents.swift the same): on
+// orbital.md that is Orbital's relay, run by us; any other address is the workspace's own
+fun relayWords(url: String?): String {
+    val host = (url ?: "https://orbital.md/mcp").removePrefix("https://").substringBefore('/')
+    val ours = host == "orbital.md"
+    return "Everything you send your agent goes through $host" + (if (ours) ", Orbital's relay, run by us" else ", your workspace's own Orbital MCP server") +
+        ": a node's id and your request with each task. A node's words stay in Tana, where your agent reads them with its own access." +
+        (if (ours) " Host your own Orbital MCP server to keep all of it in your workspace." else "")
+}
+
+// Settings' Agents: each agent linked through orbital.md, by the name it gave itself, swiped left to unlink it
 // and left to unlink it, then Connect your personal agent
 @Composable
 fun AgentsGroup(engine: Engine, connect: () -> Unit) {
@@ -81,7 +91,7 @@ fun AgentsGroup(engine: Engine, connect: () -> Unit) {
     }
 }
 
-// One linked agent: right to make it the default (not on the default itself), left to unlink it, each word on its colour
+// One linked agent: swiped left to unlink it, the word on its colour
 // under the row as it moves, as the iPhone's swipe actions
 @Composable
 private fun AgentRow(engine: Engine, a: Agent) {
@@ -89,17 +99,16 @@ private fun AgentRow(engine: Engine, a: Agent) {
     val state = rememberSwipeToDismissBoxState()
     val scope = rememberCoroutineScope()
     SwipeToDismissBox(state, backgroundContent = {
-        val toDefault = state.dismissDirection == SwipeToDismissBoxValue.StartToEnd
-        Row(Modifier.fillMaxSize().background(if (toDefault) c.accent else c.danger).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = if (toDefault) Arrangement.Start else Arrangement.End) { Text(if (toDefault) "Make Default" else "Unlink", color = Color.White) }
-    }, enableDismissFromStartToEnd = !a.isDefault, onDismiss = { way ->
-        engine.scope.launch { if (way == SwipeToDismissBoxValue.StartToEnd) engine.makeDefault(a) else engine.unlink(a) }
+        Row(Modifier.fillMaxSize().background(c.danger).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End) { Text("Unlink", color = Color.White) }
+    }, enableDismissFromStartToEnd = false, onDismiss = {
+        engine.scope.launch { engine.unlink(a) }
         scope.launch { state.reset() }
     }) {
         GroupRow(Modifier.background(c.card)) {
             Glyph("robot", Modifier.size(22.dp), c.text)
             Text(a.name, Modifier.weight(1f), color = c.text)
-            Text(listOf(if (a.isDefault) "Default" else "", if (a.on) "" else "Off").filter { it.isNotEmpty() }.joinToString(" · "), color = c.secondary, maxLines = 1)
+            Text(if (a.on) "" else "Off", color = c.secondary, maxLines = 1)
         }
     }
 }
@@ -125,9 +134,13 @@ fun ConnectAgent(engine: Engine, back: () -> Unit) {
     }
     LaunchedEffect(link?.code) {
         val code = link?.code ?: return@LaunchedEffect
+        var misses = 0 // a missed answer: the next one asks again, but one that keeps failing is said, not waited on for ever (Agents.swift poll)
         while (state == "waiting") {
             delay(2000)
-            val s = maybe { engine.linkStatus(code) } ?: continue // a missed answer: the next one asks again
+            val s = try { engine.linkStatus(code).also { misses = 0 } } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                if (++misses >= 3) { failure = e.message; state = "failed" }
+                continue
+            }
             val a = s.agent
             if (s.state == "linked" && a != null) {
                 linked = a.name
@@ -159,7 +172,7 @@ fun ConnectAgent(engine: Engine, back: () -> Unit) {
             }
         }
         item("link") {
-            Group("Then ask your agent to link", footer = "Send the instructions to your agent. The code works once, for fifteen minutes.\n\nOnly the node's id and your request go through ${(link?.url ?: "https://orbital.md/mcp").removePrefix("https://")}, and it keeps neither: the node's words stay in Tana, where your agent reads them with its own Tana access.") {
+            Group("Then ask your agent to link", footer = "Send the instructions to your agent. The code works once, for fifteen minutes.\n\n${relayWords(link?.url)}") {
                 val l = link
                 when {
                     state == "asking" -> GroupRow(last = true) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Text("Getting a code…", color = c.secondary) }

@@ -24,6 +24,7 @@ titleEl.addEventListener('blur', () => titleEl.removeAttribute('tabindex')); // 
 // Rename, on the tab (shell.js) and in Cmd+K: the heading back where a page hides it (a chat), its words selected. Only
 // while it can be typed in: titleEl carries a key then (isContentEditable reads false while it is hidden).
 function renameTitle() {
+  if (tana.renameAgentChat && agentChatOpen()) { renameAgentChat(zoom.docId); return true; } // a chat that is a Codex thread: renamed there too
   if (!titleEl.dataset.key) return false;
   document.documentElement.classList.add('renaming');
   titleEl.focus();
@@ -36,12 +37,14 @@ function revealTitle() {
   if (titleEl.dataset.key && !titleEl.getClientRects().length) document.documentElement.classList.add('renaming');
 }
 function currentDoc() {
-  const f = focused(), item = f && items.get(f.key);
+  // One row selected and no caret (a list row picked by a click, render.js) is the row the caret would be in: Cmd+K
+  // and its keys act on it, never on the page holding it (on My Tasks, the search)
+  const f = focused(), one = !f && selKeys().length === 1 ? selKeys()[0] : null, item = f ? items.get(f.key) : one ? items.get(one) : null;
   // A row that is a document in its own right — a task listed in a view, or one referenced from a date page — is the
   // current node ahead of the page holding it. Child rows carry their document's id, so without this the caret in a
   // task under a date resolves to the date, and Cmd+K offers nothing to set a status on.
   // A saved search's or a type's page is a list of other documents: a caret in a task's own lines there is that
-  // task's, never the page's (Assign to Agent handed a Dot the My Tasks search itself).
+  // task's, never the page's (Assign to … handed a Dot the My Tasks search itself).
   const own = item ? referenceTarget(item.node) || (item.node.kind === 'document' ? item.node : null) : null;
   const docId = own ? own.id : zoom && !(item && (onSearchPage() || onTypePage())) ? zoom.docId : item ? item.docId : null;
   const d = (docId && (allDocs().find((x) => x.id === docId) || extra.get(docId))) || own; // the listed copy is fresher; a referenced one may be in neither

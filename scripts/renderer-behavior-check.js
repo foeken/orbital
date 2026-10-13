@@ -68,7 +68,6 @@ const withShims = (src) => {
   if (/\brelatedBy\b/.test(src) && !/(const|let) relatedBy\b/.test(src)) src = 'globalThis.relatedBy ??= new Map();\n' + src;
   // Cmd+K's meeting rows and pages (renderer/meeting.js): a palette harness without that file offers none
   if (/\bmeetingRows\(/.test(src) && !/function meetingRows\(/.test(src)) src = 'globalThis.meetingRows ??= () => [];\n' + src;
-  if (/\bmeetingDetailsRows\(/.test(src) && !/function meetingDetailsRows\(/.test(src)) src = 'globalThis.meetingDetailsRows ??= () => [];\n' + src;
   // the shell's word on this page's window (renderer/state.js): one page, unless the harness says otherwise
   if (/\bwindowPanes\b/.test(src) && !/let windowPanes =/.test(src)) src = 'globalThis.windowPanes ??= { pages: 1 };\n' + src;
   if (/\bMEETING_PAGES\b/.test(src) && !/const MEETING_PAGES =/.test(src)) src = 'globalThis.MEETING_PAGES ??= {};\n' + src;
@@ -101,6 +100,8 @@ const withShims = (src) => {
   // no full reference is being renamed in a harness unless it says so (renderer/edit.js startRename)
   if (/\brenamingRef\b/.test(src) && !/let renamingRef/.test(src)) src = 'globalThis.renamingRef ??= null;\n' + src;
   if (/\breferenceTarget\(/.test(src) && !/const referenceTarget =/.test(src)) src = 'globalThis.referenceTarget ??= (node) => (node && node.type === \'reference\' && node.reference && node.reference.node) || null;\n' + src;
+  // nothing selected in a harness unless it says so (renderer/select.js)
+  if (/\bselKeys\(/.test(src) && !/function selKeys\(/.test(src)) src = 'globalThis.selKeys ??= () => [];\n' + src;
   // the fields container, for the helpers that paint or leave a selection in both places rows live
   if (/\$\('fields'\)/.test(src) && !/const \$ =/.test(src)) src = "globalThis.$ ??= () => ({ contains: () => false, querySelectorAll: () => [], hidden: true });\n" + src;
   // finding a row: in a harness there is one place rows are drawn, so the family answers for the outline alone
@@ -199,13 +200,21 @@ const withShims = (src) => {
   if (/\bnotify(ById|Loading)\b/.test(src) && !/const notifyById =/.test(src)) src = 'globalThis.notifyById ??= new Map(); globalThis.notifyLoading ??= new Set();\n' + src;
   // Same for the set of nodes assigned to an agent: a slice that renders a row reads it to decide on the
   // badge, and a slice that declares its own is left alone.
+  // who a node is assigned to (renderer/tasks.js), for a slice with the Unassign row: nobody, as before a read
+  // agent chats (renderer/agentchats.js), for a slice that is not about them: none open, none on another Mac, no rows of theirs
+  if (/\bagentChat(OwnRows|NewRows|Open|Away)\(|\bcodexHere\(/.test(src) && !/function agentChatOwnRows\(/.test(src)) src = "globalThis.agentChatOwnRows ??= () => []; globalThis.agentChatNewRows ??= () => []; globalThis.agentChatOpen ??= () => null; globalThis.agentChatAway ??= () => false; globalThis.isAgentChat ??= (id) => String(id || '').startsWith('orbital:agent-chat:'); globalThis.codexHere ??= () => true;\n" + src;
+  if (/\bAGENT_WHERE\b/.test(src) && !/const AGENT_WHERE =/.test(src)) src = 'globalThis.AGENT_WHERE ??= {};\n' + src; // where each agent takes a node (renderer/agent.js)
+  if (/\bopenAgentTaskLabel\(/.test(src) && !/function openAgentTaskLabel\(/.test(src)) src = "globalThis.openAgentTaskLabel ??= (id, a) => 'Go to ' + a.label + ' task';\n" + src;
+  if (/\bloadTaskMeta\(/.test(src) && !/function loadTaskMeta\(/.test(src) && !/loadTaskMeta = /.test(src)) src = "globalThis.taskMetaById ??= new Map(); globalThis.loadTaskMeta ??= () => {}; globalThis.memberName ??= (uri) => uri; globalThis.setTaskAssignees ??= () => {};\n" + src;
   if (/\bagentIds\b/.test(src) && !/(const|let) agentIds/.test(src)) src = 'globalThis.agentIds ??= new Set();\n' + src;
   // The badge reads the linked task's state; a slice that only renders a row gets the real labels and the shipped
   // fallback, which is pending — the state an assigned node has until its task is known.
   if (/\bagentStateOf\b|\bAGENT_BADGE\b/.test(src) && !/const agentStateOf =/.test(src)) src = "globalThis.agentStates ??= new Map(); globalThis.agentTasks ??= new Map(); globalThis.loadAgentStates ??= () => {}; globalThis.openAgentPrompt ??= () => {}; globalThis.nodeRank ??= () => 0; globalThis.AGENT_BADGE ??= { pending: { label: 'Agent pending', title: 'Assignment requested; no task yet' } }; globalThis.agentStateOf ??= () => 'pending';\n" + src;
   // the agents (renderer/state.js): Tana alone, the list a fresh install starts with
-  if (/\b(agentList|agentsOn|agentNamed|agentPick)\b/.test(src) && !/let agentList\b/.test(src)) src = "globalThis.agentList ??= [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }]; globalThis.agentPick ??= 'tana'; globalThis.agentsOn ??= () => globalThis.agentList.filter((a) => a.enabled && a.installed); globalThis.agentNamed ??= (id) => globalThis.agentList.find((a) => a.id === id) || null;\n" + src;
+  if (/\b(agentList|agentsOn|agentNamed|agentPick)\b/.test(src) && !/let agentList\b/.test(src)) src = "globalThis.agentList ??= [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, opensHere: true }]; globalThis.agentPick ??= 'tana'; globalThis.agentsOn ??= () => globalThis.agentList.filter((a) => a.enabled && a.installed); globalThis.agentNamed ??= (id) => globalThis.agentList.find((a) => a.id === id) || null;\n" + src;
   if (/\bloadAgentList\(/.test(src) && !/function loadAgentList\(/.test(src)) src = 'globalThis.loadAgentList ??= () => Promise.resolve();\n' + src;
+  // the selected rows (renderer/select.js), for a slice that is not about a selection: none, the caret's node is the one
+  if (/\bselKeys\(/.test(src) && !/function selKeys\(|const selKeys =/.test(src)) src = 'globalThis.selKeys ??= () => [];\n' + src;
   // whether the latest release has the Android app (renderer/overlays.js): none yet, as for a page that has not heard back
   if (/\bandroidDownload\b/.test(src) && !/let androidDownload\b/.test(src)) src = 'globalThis.androidDownload ??= null;\n' + src;
   // And for the sections a page has folded away: state.js reads them from localStorage at load, so a slice that only
@@ -821,22 +830,22 @@ async function runMultiTaskPaletteCheck() {
   `);
   assert.deepEqual(plain(context.labels()), [
     ['Set status for 2 tasks', '2 skipped', false],
-    ['Assign 2 tasks to', '2 skipped', false],
+    ['Assign 2 tasks to …', '2 skipped', false],
   ], 'palette labels report the eligible and skipped counts from the selected rows');
   assert.deepEqual(plain(context.one()), ['Set status', 'Edit assignees', 'Assign to …'], 'one selected task keeps the single-task actions');
   assert.deepEqual(plain(context.locked()), [], 'one read-only selected task offers no mutation');
   // What acts on the selection comes first, in its own group, and reaches every selected row, not only the tasks.
   assert.deepEqual(plain(context.selection(['t1', 'meeting', 'locked', 't2'])), [
     ['Selection', 'Set status for 2 tasks'],
-    ['Selection', 'Assign 2 tasks to'],
+    ['Selection', 'Assign 2 tasks to …'],
     ['Selection', 'Add 4 items to Today'],
     ['Selection', 'Add 4 items to Tomorrow'],
     ['Selection', 'Add 4 items to This Week'],
     ['Selection', 'Mark 4 items as sensitive'],
     ['Selection', 'Delete 3 items'],
   ], 'a selection offers sensitivity for everything in it and the task actions for the tasks in it');
-  assert.deepEqual(plain(context.selection(['t2'])), [['Selection', 'Open node'], ['Selection', 'Set status'], ['Selection', 'Edit assignees'], ['Selection', 'Assign to …'], ['Selection', 'Add 1 item to Today'], ['Selection', 'Add 1 item to Tomorrow'], ['Selection', 'Add 1 item to This Week'], ['Selection', 'Unmark 1 item as sensitive'], ['Selection', 'Delete 1 item']],
-    'one selected row is still a selection, and a marked one offers to unmark');
+  assert.deepEqual(plain(context.selection(['t2'])), [['Selection', 'Open node'], ['Selection', 'Expand'], ['Selection', 'Complete'], ['Selection', 'Set status'], ['Selection', 'Edit assignees'], ['Selection', 'Assign to …'], ['Selection', 'Add 1 item to Today'], ['Selection', 'Add 1 item to Tomorrow'], ['Selection', 'Add 1 item to This Week'], ['Selection', 'Unmark 1 item as sensitive'], ['Selection', 'Delete 1 item']],
+    'one selected row is still a selection, a marked one offers to unmark, and a task gets its chevron and checkbox as the caret in it does');
   // Delete reports what it can remove before it is run, the way the task actions do.
   assert.deepEqual(plain(context.del(['t1', 'meeting', 'locked', 't2'])), ['Delete 3 items', '1 skipped', false], 'a read-only row is counted as skipped, not deleted');
   assert.deepEqual(plain(context.del(['locked'])), ['Delete 0 items', '1 skipped', true], 'and a selection of nothing deletable disables the row');
@@ -855,9 +864,9 @@ async function runMultiTaskPaletteCheck() {
     ['Current node', 'Set status', 'In Progress', false],
     ['Current node', 'Edit assignees', 'Loading…', false],
     ['Current node', 'Assign to …', '', false],
-    ['Current node', 'Add to Today', '', false],
-    ['Current node', 'Add to Tomorrow', '', false],
-    ['Current node', 'Add to This Week', '', false],
+    ['Current node', 'Add to Today', "A link on today's page", false],
+    ['Current node', 'Add to Tomorrow', "A link on tomorrow's page", false],
+    ['Current node', 'Add to This Week', "A link on this week's page", false],
     ['Current node', 'Mark as sensitive', '', false],
     ['Current node', 'Delete', '', false],
   ], 'the current node gets every selection action');
@@ -2265,10 +2274,12 @@ async function runTaskMetaRetryCheck() {
 
 // Palette arrows step over rows that cannot run (info lines, unavailable choices) instead of parking on a dead row.
 function runPaletteSkipCheck() {
-  // An empty list page says what would fill it (the Work View a new account opens on is two of them), a document
+  // An empty list page says what would fill it (the Default View a new account opens on is two of them), a document
   // says it has no content, and a list of tasks names the key that makes one: the one that is recorded now.
   const emptyText = vm.runInNewContext(`
     const TIMELINE_PAGE = 'orbital:timeline', INBOX_PAGE = 'orbital:notifications', PROPOSALS_PAGE = 'orbital:proposals', SEARCH_ID = 'tana:search:';
+    ${sourceLine('const AGENT_CHATS_PAGE =')}
+    ${sourceLine('const isAgentChat =')}
     const isTypeDoc = (n) => n.id.startsWith('tana:type:'), hotkeys = {}, DEFAULT_HOTKEYS = { createTask: '⇧⌘Space' };
     const typeListCache = [{ uri: 'tana:type:flow', workflow: true }, { uri: 'tana:type:risk', workflow: false }];
     const filters = new Map([['tana:search:mine', { types: ['tasks'] }], ['tana:search:meet', { types: ['meetings'] }],
@@ -2284,6 +2295,8 @@ function runPaletteSkipCheck() {
   assert.match(emptyText.text('orbital:timeline'), /^Nothing yet\./, 'an empty Timeline says what shows up there');
   assert.equal(emptyText.text('tana:search:mine'), 'Nothing matches. ⇧⌘Space creates a task.', 'an empty My Tasks names the key that makes one');
   assert.equal(emptyText.text('tana:search:meet'), 'Nothing matches.', 'a search that lists no tasks does not');
+  assert.match(emptyText.text('orbital:agent-chats'), /New chat with ChatGPT starts one/, 'an empty Agent chats page says how to start one');
+  assert.match(emptyText.text('orbital:agent-chat:new'), /^Ask ChatGPT anything below/, 'and a new agent chat says where it is kept, not Tana\'s words');
   // a workflow type's documents are tasks, so a search of it alone is a list of tasks: its Status and Assigned to pills show
   assert.equal(emptyText.text('tana:search:flow'), 'Nothing matches. ⇧⌘Space creates a task.', 'a search of a workflow type lists tasks');
   assert.equal(emptyText.text('tana:search:risk'), 'Nothing matches.', 'one that also names a type without a workflow does not');
@@ -2783,8 +2796,8 @@ async function runNoteInPageCheck() {
 }
 
 
-// Edit meeting details (#758): offered where Change time is, one field, read by the AI only when ↩ asks, and written only
-// when the time it read is pressed, as a start and an end through Change time's own write.
+// Change time (#758): a time typed plainly is read at once; other words are read by the AI only when ↩ asks, and written
+// only when the time it read is pressed, as a start and an end.
 async function runMeetingDetailsCheck() {
   const api = vm.runInNewContext(`
     const calls = [], reads = [], relatedBy = new Map();
@@ -2795,22 +2808,21 @@ async function runMeetingDetailsCheck() {
     const meetingSpan = (start, end) => start + '-' + end;
     const editMeetingNow = (change) => calls.push(['edit', change]);
     const tana = { editMeeting: () => {}, readMeetingTime: (words, docId) => { calls.push(['read', words, docId]); return new Promise((resolve, reject) => reads.push({ resolve, reject })); } };
-    ${functionSource('meetingOf')}
-    ${sourceLine('let meetingDetailsRead')}
+    const parseMeetingTime = (words) => (words === '14:00' ? { start: 50, end: 80 } : null); // the plain reading: its own check, above
+    const loadAttendeePool = () => {}, meetingLocationRows = () => [], meetingAttendeeRows = () => [];
+    ${sourceLine('let meetingTimeRead')}
     ${functionSource('readRows')}
     ${functionSource('readWords')}
     ${sourceLine('const localZone')}
     ${sourceLine('const zoneName')}
     ${functionSource('zoneSpan')}
     ${functionSource('zoneNote')}
-    ${functionSource('meetingDetailsRows')}
-    ${functionSource('openMeetingDetails')}
+    ${functionSource('meetingTimeRows')}
+    ${functionSource('openMeetingPage')}
     const settle = () => new Promise((r) => setTimeout(r, 0));
     ({
-      offered: (info, doc = { id: 'tana:event:m', icon: 'meeting' }) => { meetingCtx = { docId: 'tana:event:m', info }; return meetingDetailsRows(doc, 'Current node').map((r) => [r.id, r.label]); },
-      noAI: () => { delete tana.readMeetingTime; },
-      open: () => { meetingCtx = { docId: 'tana:event:m', info: { editable: true, start: 1, end: 2 } }; openMeetingDetails(); return [page.mode, page.placeholder]; },
-      openKept: (timeZone) => { meetingCtx = { docId: 'tana:event:m', info: { editable: true, start: 1, end: 2, timeZone } }; openMeetingDetails(); },
+      open: () => { meetingCtx = { docId: 'tana:event:m', info: { editable: true, start: 1, end: 2 } }; openMeetingPage('meetingTime', 'When?'); return page.mode; },
+      openKept: (timeZone) => { meetingCtx = { docId: 'tana:event:m', info: { editable: true, start: 1, end: 2, timeZone } }; openMeetingPage('meetingTime', 'When?'); },
       rows: (typed) => page.rows(typed.toLowerCase(), typed).map((r) => [r.label, r.hint || '', !!r.disabled]),
       spins: (typed) => page.rows(typed.toLowerCase(), typed).map((r) => !!r.spin),
       press: (typed, i = 0) => { const r = page.rows(typed.toLowerCase(), typed)[i]; if (r && !r.disabled) r.run(); }, // as runRow: ↩ on a note does nothing
@@ -2821,12 +2833,12 @@ async function runMeetingDetailsCheck() {
       back: () => page.back(), calls: () => calls,
     });
   `, { setTimeout, Promise });
-  assert.deepEqual(plain(api.offered({ editable: true, start: 1, end: 2 })), [['meetingDetails', 'Edit meeting details']], 'on a meeting this user may change');
-  for (const info of [{ editable: false, start: 1, end: 2 }, { editable: true, allDay: true, start: 1, end: 2 }, null])
-    assert.deepEqual(plain(api.offered(info)), [], 'never on one they may not, on an all-day one, or before main has said');
-  assert.deepEqual(plain(api.offered({ editable: true, start: 1, end: 2 }, { id: 'tana:text:x', icon: 'doc' })), [], 'nor on a page that is not that meeting\u2019s');
-  assert.deepEqual(plain(api.open()), ['meetingDetails', 'When? tomorrow from 3-5, an hour later, for 45 minutes'], 'one field, saying what it takes');
+  assert.equal(api.open(), 'meetingTime', 'Change time is the one page for a new time');
   assert.deepEqual(plain(api.rows('')), [['1-2', 'Now', true]], 'empty, it shows the meeting as it is');
+  assert.deepEqual(plain(api.rows('14:00')), [['50-80', '\u21A9', false], ['1-2', 'Now', true]], 'a time typed plainly is read at once, no AI');
+  api.press('14:00');
+  assert.deepEqual(plain(api.calls()), [['edit', { start: 50, end: 80 }]], 'and written on the press');
+  api.calls().length = 0;
   assert.deepEqual(plain(api.rows('tomorrow from 3-5')), [['Read \u201Ctomorrow from 3-5\u201D with AI', '\u21A9', false], ['1-2', 'Now', true]], 'words are read only when \u21A9 asks');
   api.press('tomorrow from 3-5'); api.press('tomorrow from 3-5');
   assert.deepEqual(plain(api.calls()), [['read', 'tomorrow from 3-5', 'tana:event:m']], 'one press, one reading, for this meeting');
@@ -2847,7 +2859,6 @@ async function runMeetingDetailsCheck() {
   const writes = api.calls().filter((c) => c[0] === 'edit').length;
   const held = api.row('friday at 4');
   api.elsewhere();
-  assert.deepEqual(plain(api.rows('friday at 4')), [], 'once ⌘K is on another meeting this page offers nothing');
   held.run();
   assert.equal(api.calls().filter((c) => c[0] === 'edit').length, writes, 'and a reading for one meeting is never written to another');
   api.back();
@@ -2858,7 +2869,7 @@ async function runMeetingDetailsCheck() {
     'a meeting kept in another zone says the times are yours');
   api.openKept(LOCAL_ZONE);
   assert.deepEqual(plain(api.rows('')), [['1-2', 'Now', true]], 'and one kept in yours says nothing more');
-  console.log('ok  Edit meeting details: one field, read by the AI on \u21A9, shown before it is written, a start and an end only, on a meeting you may change');
+  console.log('ok  Change time: a plain time at once, other words read by the AI on \u21A9, shown before it is written, a start and an end only');
 }
 
 // linkTo (renderer/toolbar.js) tells a caller that asks when its write did not land, so "/" Meeting can answer for a meeting
@@ -4740,7 +4751,7 @@ function runCurrentNodeStatusCheck() {
     ${sourceBetween('const isReference =', 'const referenceLabel =')}
     ${sourceBetween('const isTask =', '\n')}
     ${sourceBetween('const canEditNode =', '\n')}
-    const selKeys = () => [];  // nothing selected: the palette is about the current node, not a selection
+    let picked = []; const selKeys = () => picked; // most scenes select nothing: the palette is about the current node
     const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Completed'], ['not_now', 'Later']];
     const stateOf = () => 'proposed';
     const openStatusPalette = () => {}, statusRows = () => [];
@@ -4752,7 +4763,7 @@ function runCurrentNodeStatusCheck() {
     ({ at: (scene) => {
         zoom = scene.zoom || null; docs = scene.docs || [];
         items.clear(); for (const [key, item] of scene.items) items.set(key, item);
-        focusedKey = scene.focusedKey;
+        focusedKey = scene.focusedKey; picked = scene.selected || [];
         palDoc = currentDoc();
         return { on: (palDoc && palDoc.id) || null, rows: taskActionRows().map((row) => row.label) };
       } });
@@ -4775,13 +4786,21 @@ function runCurrentNodeStatusCheck() {
   assert.deepEqual(plain(api.at({ zoom: { docId: DATE.id, nodeId: null }, docs: [DATE],
       items: [['k', row({ id: 'n2', kind: 'block', text: 'just a note' }, DATE.id)]], focusedKey: 'k' })),
     { on: DATE.id, rows: [] }, 'while a plain note is nothing on its own, so it stays the page it belongs to, which has no status');
-  // My Tasks is a saved search: a caret in a task's notes there is the task's, or Assign to Agent hands over the search
+  // My Tasks is a saved search: a caret in a task's notes there is the task's, or Assign to … hands over the search
   const SEARCH = { id: 'tana:search:mytasks', kind: 'document', icon: 'search', text: 'My Tasks' };
   assert.equal(plain(api.at({ zoom: { docId: SEARCH.id, nodeId: null }, docs: [SEARCH, TASK],
       items: [['k', row({ id: 'n4', kind: 'block', text: 'a note under the task' }, TASK.id)]], focusedKey: 'k' })).on,
     TASK.id, 'a line inside a task listed on a saved search is that task, not the search');
   assert.equal(plain(api.at({ zoom: { docId: SEARCH.id, nodeId: null }, docs: [SEARCH, TASK], items: [], focusedKey: null })).on,
     SEARCH.id, 'with no caret the page is still the search');
+  // a task picked by a click on My Tasks (no caret, one row selected) is that task, as the caret in it is
+  assert.equal(plain(api.at({ zoom: { docId: SEARCH.id, nodeId: null }, docs: [SEARCH, TASK],
+      items: [['k', row(TASK, SEARCH.id)]], focusedKey: null, selected: ['k'] })).on,
+    TASK.id, 'one selected task on a saved search is the current node, not the search');
+  const OTHER = { ...TASK, id: 'tana:text:task2', text: 'Call the bank' };
+  assert.equal(plain(api.at({ zoom: { docId: SEARCH.id, nodeId: null }, docs: [SEARCH, TASK, OTHER],
+      items: [['k', row(TASK, SEARCH.id)], ['k2', { key: 'k2', node: OTHER, docId: SEARCH.id }]], focusedKey: null, selected: ['k', 'k2'] })).on,
+    SEARCH.id, 'while two selected rows are a selection, and the page stays the current node');
 }
 // A saved search page lists documents the way a view does, but its rows live in kids rather than in any view's nodes.
 // Three things used to stop at that boundary and leave the rows as they were first drawn: a live change to one of
@@ -4937,7 +4956,7 @@ function runNotifyBellCheck() {
 }
 
 
-// Handing a node to the local agent from Cmd+K. "Assign to Agent" does not assign: it opens a prompt page inside
+// Handing a node to an agent from Cmd+K. "Assign to <agent> …" does not assign: it opens a prompt page inside
 // the palette, and only ⌘↩ on something non-blank writes anything. The mark is kept locally, the badge is put on the
 // row itself — a deferred render would leave the row as it was, the way the bell did — and taking it back drops the
 // prompt with the assignment.
@@ -4960,15 +4979,16 @@ function runCodexAssignCheck() {
     const OTHER = 'tana:text:01exampleb0000000000000000';
     const served = new Map([[DOC, [{ id: 'b1', text: 'Something already written', children: [] }]], [OTHER, [{ id: 'b9', text: 'Another page', children: [] }]]]);
     const agentStates = new Map();
+    const taskMetaById = new Map(), loadTaskMeta = () => {}, memberName = (uri) => uri.split(':').pop(), assigneesSet = [], setTaskAssignees = (d, list) => assigneesSet.push([d.id, list]);
     const agentTasks = new Map([[DOC, { agent: 'codex', taskId: '01a0b379-afbc-74c3-a191-c419e6543bcc' }]]);
-    // Tana and Codex on, Tana the default: the page offers both, and the row that sends names the one it goes to
-    const agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, link: true, openNew: true, opens: true }];
+    // Tana and Codex on: the page offers both, and the row that sends names the one it goes to
+    const agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, opensHere: true }, { id: 'codex', label: 'Codex', icon: 'robot', installed: true, enabled: true, opens: true }];
     let agentPick = 'tana';
     const agentsOn = () => agentList.filter((a) => a.enabled && a.installed), agentNamed = (id) => agentList.find((a) => a.id === id) || null;
-    const openedTasks = [], wentTo = [];
-    const tana = { openAgentTask: async (id) => { openedTasks.push(id); return true; }, setAgent: async (id, on, prompt, agent) => {
+    const openedTasks = [], wentTo = [], notes = [], showNote = (text) => notes.push(text);
+    const tana = { openAgentTask: async (id) => { openedTasks.push(id); return true; }, setAgent: async (id, on, prompt, agent, options) => {
       sent.push([id, on, prompt]);
-      if (on) sent.agent = agent;
+      if (on) { sent.agent = agent; sent.options = options; }
       if (refuse) throw new Error('This node is read-only in the outliner');
       if (on && typeof prompt === 'string' && prompt.trim()) {
         const rows = served.get(id) || [];
@@ -5028,9 +5048,11 @@ function runCodexAssignCheck() {
     const TIMELINE_PAGE = 'orbital:timeline'; // renderer/timeline.js: where placeAgentBadge puts it in line
     ${functionSource('placeAgentBadge')}
     ${functionSource('agentBadgeEl')}
+    const agentChatsKnown = [], AGENT_CHAT = 'orbital:agent-chat:'; // no agent chat here: a ChatGPT task opens in its app
     ${functionSource('openAgentTask')}
     ${functionSource('agentHeader')}
     ${functionSource('patchAgent')}
+    ${functionSource('forgetAgent')}
     ${sourceBetween('const AGENT_GROUP =', 'function promptEditor(')}
     ${functionSource('promptEditor')}
     ${functionSource('openAgentPrompt')}
@@ -5052,12 +5074,15 @@ function runCodexAssignCheck() {
       children: (kids.get(DOC) || []).map((n) => n.text + (n.children.length ? '(' + n.children.map((c) => c.text).join(',') + ')' : '')),
       other: (kids.get(OTHER) || []).map((n) => n.text) });
     ({
-      label: () => paletteRows('').find((r) => r.rank === 'codex').label,
       byName: () => paletteRows('').filter((r) => r.rank === 'codexTo').map((r) => [r.label, r.hint]),
       pressTo: async (label) => { await paletteRows('').find((r) => r.label === label).run(); await tick(); return { mode: palMode, agent: agentPick, sent: sent.length, rows: agentPromptRows().map((r) => r.label) }; },
-      pressRow: async () => { sent.length = 0; closed.length = 0; errors.length = 0; await paletteRows('').find((r) => r.rank === 'codex').run(); await tick(); return state(); },
-      unassignRow: () => (paletteRows('').find((r) => r.rank === 'codexUnassign') || {}).label || null,
-      pressUnassign: async () => { sent.length = 0; closed.length = 0; errors.length = 0; await paletteRows('').find((r) => r.rank === 'codexUnassign').run(); await tick(); return state(); },
+      // opened without an agent named, as a drop on the Agent group does (renderer/drag.js): the agents listed under it
+      pressRow: async () => { sent.length = 0; closed.length = 0; errors.length = 0; openAgentPrompt(palDoc); await tick(); return state(); },
+      unassignRow: () => (paletteRows('').find((r) => r.rank === 'unassign') || {}).label || null,
+      // the same row for people: a node with a person on it and no agent, Unassign taking them off
+      people: async () => { tana.setAssignees = () => {}; taskMetaById.set(DOC, { assignees: ['tana:user-profile:robin'] }); const r = paletteRows('').find((x) => x.rank === 'unassign');
+        sent.length = 0; await r.run(); await tick(); taskMetaById.clear(); delete tana.setAssignees; return { label: r.label, icon: r.icon, hint: r.hint, set: [...assigneesSet], sent: sent.length }; },
+      pressUnassign: async () => { sent.length = 0; closed.length = 0; errors.length = 0; await paletteRows('').find((r) => r.rank === 'unassign').run(); await tick(); return state(); },
       dotGoRow: () => { agentList.push({ id: 'relay:echo', label: 'Echo', icon: 'robot', installed: true, enabled: true, linked: true }); agentIds.add(DOC); agentStates.set(DOC, 'working'); agentTasks.set(DOC, { agent: 'relay:echo', taskId: 't-echo' });
         const r = paletteRows('').find((row) => row.rank === 'codexOpen'), el = agentBadgeEl(DOC); agentList.pop(); return { row: r ? r.label : null, role: el.attrs.role }; },
       type: (text) => { palText.value = text; },
@@ -5069,7 +5094,10 @@ function runCodexAssignCheck() {
         agentPromptRows().find((r) => r.label === 'Codex').run();
         const there = agentPromptRows()[0].label;
         return { here, there }; },
-      sentTo: () => sent.agent,
+      sentTo: () => sent.agent, notes: () => notes,
+      // with a chat on this Mac: ChatGPT is assigned into it by default, its rows the choice, and the note says so
+      latest: async (key) => { agentChatsKnown.push({ id: 'orbital:agent-chat:x', title: 'Week plan', icon: 'chatgpt', agentChat: {} }); notes.length = 0; openAgentPrompt(palDoc, 'codex'); palText.value = 'Go';
+        const rows = agentPromptRows().filter((r) => r.group === 'Chat').map((r) => [r.label, r.hint]); submitAgentPrompt(); await tick(); agentChatsKnown.length = 0; return { rows, options: sent.options, notes: [...notes] }; },
       refuse: (value) => { refuse = value; },
       // the badge as a way in: linked opens that node's task, pending has nowhere to go
       badge: (linked) => { if (linked) agentStates.set(DOC, 'working'); else agentStates.delete(DOC); const el = agentBadgeEl(DOC); return { role: el.attrs.role, label: el.attrs['aria-label'], tabIndex: el.tabIndex, hasClick: typeof el.onclick === 'function' }; },
@@ -5092,8 +5120,7 @@ function runCodexAssignCheck() {
     });
   `);
   return (async () => {
-    assert.equal(api.label(), 'Assign to Agent', 'an unassigned node offers to hand itself to the agent');
-    assert.deepEqual(plain(api.byName()), [['Assign to Tana …', 'Default'], ['Assign to Codex …', '']], 'and to each agent that is on by its name, the default said');
+    assert.deepEqual(plain(api.byName()), [['Assign to Tana …', 'A Tana chat, answered by Tana\'s AI'], ['Assign to Codex …', 'Into your latest ChatGPT chat, or a new one']], 'an unassigned node offers each agent that is on by its name, each saying where it takes the node, and nothing else: you pick the one you want');
     assert.deepEqual(plain(await api.pressTo('Assign to Codex …')), { mode: 'agentPrompt', agent: 'codex', sent: 0, rows: ['What should Codex do?'] }, 'which opens the same prompt page with that agent picked, assigns nothing yet, and offers no other agent: the row chose');
     const opened = plain(await api.pressRow());
     assert.equal(opened.mode, 'agentPrompt', 'choosing it advances to the prompt page inside the palette');
@@ -5102,7 +5129,7 @@ function runCodexAssignCheck() {
     assert.equal(opened.editor, true, 'the multiline editor takes the place of the palette field');
     assert.equal(opened.field, false, 'which is hidden while it does');
     const blank = plain(api.promptRow());
-    assert.match(blank.group, /Assign to Agent/, 'the page names itself');
+    assert.match(blank.group, /^Assign ·/, 'the page names itself');
     assert.match(blank.group, /⌘↩ assigns/, 'and says how to send, where the palette puts the line that wraps');
     assert.equal(blank.disabled, true, 'an empty prompt cannot be sent');
     api.type('   \n  ');
@@ -5113,7 +5140,7 @@ function runCodexAssignCheck() {
     assert.equal(plain(api.promptRow()).disabled, false, 'with something to send, the row is live');
     // The agent is named on the row that sends: ⌘↩ from the editor never goes near the list the tick is in.
     const where = plain(api.runsOn());
-    assert.equal(where.here, 'Assign to Tana', 'the row that sends names the default agent, which is where the page starts');
+    assert.equal(where.here, 'Assign to Tana', 'the row that sends names the agent, the first one when none was named');
     assert.equal(where.there, 'Assign to Codex', 'and follows the agent chosen, so the destination is read where the press happens');
     const newline = plain(await api.submitKey('Enter', false));
     assert.equal(newline.handled, false, 'a plain ↩ is left to the editor, so it adds a line');
@@ -5122,6 +5149,8 @@ function runCodexAssignCheck() {
     assert.deepEqual(sent.sent, [[CODEX_DOC, true, 'Draft the release notes\nthen tell me']],
       '⌘↩ stores the prompt, trimmed at the ends and otherwise as typed, and assigns in the same call');
     assert.equal(api.sentTo(), 'codex', 'to the agent the page chose');
+    assert.deepEqual(plain(api.notes()), ['Sent to ChatGPT, in a new chat'], 'and since nothing opens, a note says where it went: a new chat, with none to go to');
+    assert.deepEqual(plain(await api.latest()), { rows: [['Week plan', '✓ Latest'], ['New chat', '']], options: { newChat: false }, notes: ['Sent to ChatGPT, in your latest chat'] }, 'with a chat on this Mac, the latest is ticked and the assignment goes there by default');
     assert.equal(sent.assigned, true, 'the local mark follows at once rather than waiting for a re-read');
     assert.equal(sent.badges.length, 1, 'the row gains one badge');
     // An assignment whose Codex task has not registered itself yet is pending, in words as well as in colour: the
@@ -5146,14 +5175,16 @@ function runCodexAssignCheck() {
     assert.equal(sent.editor, false, 'the editor is put away');
     assert.equal(sent.prompt, '', 'and emptied, so the next node is asked about from scratch');
     // Escape on the prompt page: back to the commands, with nothing written
-    assert.equal(api.label(), 'Assign to Agent', 'an assigned node can be handed over again: the request in its block is replaced');
-    assert.equal(api.unassignRow(), 'Unassign from Agent', 'and a row of its own says how to take it back');
+    assert.deepEqual(plain(api.byName()), [['Assign to Tana …', 'A Tana chat, answered by Tana\'s AI'], ['Assign to Codex …', 'Replaces what it was asked']], 'an assigned node can be handed over again: the request in its block is replaced, said on its holder');
+    assert.equal(api.unassignRow(), 'Unassign', 'and one Unassign row says how to take it back');
     const back = plain(await api.pressUnassign());
     // the third argument is the prompt, absent here and null by the time it comes back through JSON
     assert.deepEqual(back.sent, [[CODEX_DOC, false, null]], 'and taking it back needs nothing typed');
     assert.equal(back.assigned, false, 'the mark is dropped');
     assert.equal(back.badges.length, 0, 'and the badge goes with it');
     assert.equal(api.unassignRow(), null, 'an unassigned node offers nothing to take back');
+    assert.deepEqual(plain(await api.people()), { label: 'Unassign', icon: 'unassigned', hint: 'robin', set: [[CODEX_DOC, []]], sent: 0 },
+      'a node with people on it offers the same Unassign, which takes them off and leaves the agents alone');
     const reopened = plain(await api.pressRow());
     assert.equal(reopened.mode, 'agentPrompt', 'assigning again asks again');
     api.type('never mind');
@@ -7931,6 +7962,9 @@ async function runMeetingEditCheck() {
     ${functionSource('fuzzyMatch')}
     ${sourceBetween('const WEEKDAYS =', 'const PIN_DATE_GROUP')}
     ${withShims(fs.readFileSync(require.resolve('../renderer/meeting.js'), 'utf8').replace("'use strict';", ''))}
+    ${functionSource('readRows')}
+    ${sourceLine('const localZone')}
+    ${sourceLine('const zoneName')}
     const tick = () => new Promise(setImmediate);
     ({
       cmd: async (doc, canEdit = true, wholeDay = false) => { editable = canEdit; allDay = wholeDay; meetingCtx = null; calls.length = 0; meetingRows(doc, 'Current node'); await tick(); await tick(); return meetingRows(doc, 'Current node').map((r) => [r.id, r.label, r.hint]); },
@@ -7962,9 +7996,10 @@ async function runMeetingEditCheck() {
   assert.deepEqual(plain(['', 'blah', '25:00', '14:00-13:00', 'blah 14:00'].map(api.parse)), [null, null, null, null, null], 'anything else reads as no time');
 
   assert.equal(await api.open('meetingTime'), 'meetingTime');
-  assert.deepEqual(plain(api.rows('')), [['Type a day and/or a time: 14:00, tomorrow 9:30, fri 10:00-11:30', '', true]]);
-  assert.deepEqual(plain(api.rows('xyz')), [['No time in \u201Cxyz\u201D', '', true]]);
-  assert.deepEqual(plain(api.rows('14:00')), [['Tue 22 Sep 14:00\u201314:30', '\u21A9', false]], 'the row shows what Enter will write');
+  const now = ['Tue 22 Sep 10:00\u201310:30', 'Now', true];
+  assert.deepEqual(plain(api.rows('')), [now], 'empty, the meeting as it is');
+  assert.deepEqual(plain(api.rows('xyz')), [['No time in \u201Cxyz\u201D', '', true], now], 'words it cannot read, and no AI to read them');
+  assert.deepEqual(plain(api.rows('14:00')), [['Tue 22 Sep 14:00\u201314:30', '\u21A9', false], now], 'the row shows what Enter will write');
   const moved = plain(await api.press('14:00', 0));
   assert.deepEqual(moved.calls, [['edit', 'tana:event:m', { start: new Date(2026, 8, 22, 14).getTime(), end: new Date(2026, 8, 22, 14, 30).getTime() }]]);
   assert.equal(moved.closed, 1, 'and the palette closes');
@@ -8139,7 +8174,7 @@ async function runHelpOnceCheck() {
   assert.deepEqual(plain(await pane(async () => { throw new Error('gone'); }).go()), { opened: 0, seen: false }, 'a claim that fails shows nothing and spends nothing: the next launch asks again');
   assert.deepEqual(plain(await pane(null).go()), { opened: 1, seen: true }, 'with no main to ask (the in-file mock) the page opens it itself');
   const quiet = main(false);
-  assert.deepEqual(plain(await pane(quiet, ':2').go()), { opened: 0, seen: false }, 'the right half of the Work View stays quiet');
+  assert.deepEqual(plain(await pane(quiet, ':2').go()), { opened: 0, seen: false }, 'the right half of the Default View stays quiet');
   assert.equal(quiet.asked(), 0, 'and does not claim it from the main half');
   assert.deepEqual(plain(await pane(quiet, '', false).go()), { opened: 0, seen: false }, 'signed out or not yet connected: no tour, over the login');
   assert.equal(quiet.asked(), 0, 'and no claim, which main could only answer from this machine\u2019s own copy');
@@ -8643,12 +8678,32 @@ async function runAssignReplaceCheck() {
     const isTask = () => true, loadMembers = () => {}, loadTaskMeta = () => {}, memberName = (id) => id, isRealId = () => true;
     const tana = {}, agentIds = new Set(), palDoc = null, setTaskAssignees = (doc, uris) => written.push(uris);
     ${functionSource('memberRows')}
+    ${functionSource('agentPickRows')}
     ${functionSource('assigneeRows')}
     ({ pick: (label, replace) => { written.length = 0; assigneeRows('', { id: 't' }, replace).find((r) => r.label === label).run(); return written[0]; } });
   `);
   assert.deepEqual(plain(api.pick('bo', true)), ['bo'], 'from the field, a person replaces who has it');
   assert.deepEqual(plain(api.pick('bo', false)), ['ann', 'bo'], 'Edit assignees adds them');
   assert.deepEqual(plain(api.pick('ann', false)), [], 'and takes one off again');
+  const withAgents = vm.runInNewContext(`
+    const opened = [], members = [{ id: 'ann' }], taskMetaById = new Map([['t', { assignees: [] }]]);
+    const isTask = () => true, loadMembers = () => {}, loadTaskMeta = () => {}, memberName = (id) => id, isRealId = () => true, setTaskAssignees = () => {};
+    const tana = { setAgent: true }, agentIds = new Set(['t']), agentTasks = new Map([['t', { agent: 'codex' }]]), openAgentPrompt = (doc, id) => opened.push(id);
+    const agentsOn = () => [{ id: 'tana', label: 'Tana', icon: 'tana' }, { id: 'codex', label: 'ChatGPT', icon: 'chatgpt' }];
+    ${functionSource('memberRows')}
+    ${functionSource('agentPickRows')}
+    ${functionSource('assigneeRows')}
+    ${functionSource('manyAssigneeRows')}
+    const rows = assigneeRows('', { id: 't' });
+    rows[1].run();
+    const one = { docs: [{ id: 't' }] }, two = { docs: [{ id: 't' }, { id: 'u' }] }, shown = (list) => list.map((r) => [r.group, r.label]);
+    ({ rows: rows.map((r) => [r.group, r.label, r.hint]), opened, many: shown(manyAssigneeRows('', one, true)), folded: shown(manyAssigneeRows('', one)), several: shown(manyAssigneeRows('', two, true)) });
+  `);
+  assert.deepEqual(plain(withAgents.rows), [['Agents', 'Tana', ''], ['Agents', 'ChatGPT', '✓'], ['Assignees', 'Unassigned', '✓'], ['Assignees', 'ann', '']], 'the agents first, in a section of their own, the one it is with ticked');
+  assert.deepEqual(plain(withAgents.opened), ['codex'], 'and each opens the prompt on itself');
+  assert.deepEqual(plain(withAgents.many), [['Agents', 'Tana'], ['Agents', 'ChatGPT'], ['Assignees', 'Unassigned'], ['Assignees', 'ann']], 'Assign to … starts with the agents too');
+  assert.deepEqual(plain(withAgents.folded), [['Assignees', 'Unassigned'], ['Assignees', 'ann']], 'but not folded into ⌘K, where Assign to ChatGPT … is a row already');
+  assert.deepEqual(plain(withAgents.several), [['Assignees', 'Unassigned'], ['Assignees', 'ann']], 'nor for several tasks: an agent is handed one node');
   assert.match(source, /openAssigneePalette\(node, null, true\)/, 'the field opens the replacing picker');
   console.log('ok  the Assigned to field replaces the assignee; Edit assignees toggles one');
 }
@@ -8692,6 +8747,20 @@ async function runNotesPlaceCheck() {
   console.log('ok  a meeting showing your notes reopens on them after a reload');
 }
 checks.push(runNotesPlaceCheck);
+// The Work View is called the Default View now: a copy saved under its id before the rename reads with the new name.
+function runDefaultViewNameCheck() {
+  const views = (saved) => vm.runInNewContext(`
+    const WORK_VIEW = { id: 'workView', name: 'Default View', keys: {} };
+    const pref = (k, d) => (${JSON.stringify(saved)} || d);
+    ${functionSource('savedViews')}
+    savedViews().map((v) => v.name);
+  `);
+  assert.deepEqual(plain(views(null)), ['Default View'], 'a new list starts with the Default View');
+  assert.deepEqual(plain(views([{ id: 'workView', name: 'Work View', keys: {} }, { id: 'v2', name: 'Work View', keys: {} }])), ['Default View', 'Work View'],
+    'its copy saved under the old name reads with the new one; a view of your own called that keeps its name');
+  console.log('ok  the Work View reads as the Default View, saved before the rename or not');
+}
+checks.push(runDefaultViewNameCheck);
 
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);

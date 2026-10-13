@@ -1,6 +1,6 @@
 'use strict';
 // The agents' pages in Cmd+K: signing in with ChatGPT, the OpenAI API key (kept for whoever already has one),
-// Choose agents, linking a task that already exists in an agent's app, and the prompt page Assign to Agent opens.
+// Choose agents, Connect your personal agent and a linked agent's page, and the prompt page Assign to … opens.
 // renderer/palette.js lists their rows and draws every page; the agent's badge and state are renderer/render.js and
 // renderer/nodes.js. Which agents there are is main's (main/agent.js), drawn from agentList (renderer/state.js).
 
@@ -43,7 +43,7 @@ function chatgptRows(q) {
     { group: 'Actions', icon: 'chatgpt', label: 'Sign out of ChatGPT', run: () => run(async () => { chatgptAuth = await tana.chatgptLogout(); renderPalette(); }) },
   ];
   else rows = [
-    { group: 'ChatGPT', icon: 'chatgpt', label: chatgptAuth.available === false ? 'Sign-in unavailable' : 'Not signed in', hint: chatgptAuth.available === false ? (chatgptAuth.error || 'Codex CLI unavailable') : (chatgptAuth.apiKey ? 'Preferred over API key' : ''), disabled: true },
+    { group: 'ChatGPT', icon: 'chatgpt', label: chatgptAuth.available === false ? 'Sign-in unavailable' : 'Not signed in', hint: chatgptAuth.available === false ? (chatgptAuth.error || 'Install the ChatGPT app to sign in') : (chatgptAuth.apiKey ? 'Preferred over API key' : ''), disabled: true },
     { group: 'Actions', icon: 'chatgpt', label: 'Sign in with ChatGPT', run: startChatGPTLogin },
   ];
   return matchRows(rows, q);
@@ -69,13 +69,12 @@ const openaiRegionRows = () => OPENAI_REGIONS.map(([id, label]) => ({ group: 'Op
   hint: label === openaiRegionName() ? 'Current' : '', keepOpen: true,
   run: () => run(async () => { chatgptAuth = { ...(chatgptAuth || {}), region: await tana.setOpenAIRegion(id) }; closePalette(); showNote('OpenAI region: ' + label); }) }));
 function openOpenAIRegionPalette() { openPage('openaiRegion', 'OpenAI region…', { rows: (q) => matchRows(openaiRegionRows(), q), back: BACK_TO_COMMANDS }); }
-// ---- Choose agents, and Set default agent ----
-// Every agent the app knows, in one list: Tana always on, Codex and Claude greyed with what to install until this Mac has
-// them, then your linked agents (each has a page of its own: ↩ opens it), with Connect your personal agent under
-// them (Reset agent link key is in Cmd+K itself). ↩ on a built-in one switches it on or off. The default, the agent Assign to Agent
-// starts on, is picked on a page of its own (Set default agent …). The lists are main's, and each answer is the new
-// list, so the page redraws from what was stored.
-const AGENTS_GROUP = 'Agents', DEFAULT_GROUP = 'Default agent · ↩ makes it the default';
+// ---- Choose agents ----
+// Every agent the app knows, in one list: Tana always on, Codex greyed with what to install until this Mac has
+// it, Claude coming soon, then your linked agents (each has a page of its own: ↩ opens it), with Connect your personal agent under
+// them (Reset agent link key is in Cmd+K itself). ↩ on a built-in one switches it on or off. There is no default: each
+// Assign to <agent> … is the one you pick. The lists are main's, and each answer is the new list, so the page redraws.
+const AGENTS_GROUP = 'Agents';
 // the chat's @agents follow the same switches: read again here, since this page is left out of its own settings:changed
 const agentsApply = (call) => run(async () => {
   const list = await call();
@@ -88,6 +87,7 @@ function agentsRows(q) {
     hint: a.id === 'tana' ? 'Always on' : !a.installed ? a.missing || 'Not installed' : a.enabled ? 'On' : 'Off',
     // not installed here only stops switching it on: one switched on at another Mac (the choice follows you) can be switched off here
     disabled: a.id === 'tana' || (!a.installed && !a.enabled), run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) }));
+  rows.push({ group: AGENTS_GROUP, icon: 'robot', label: 'Claude', hint: 'Coming soon', disabled: true }); // to come back properly; settings.js says the same
   if (tana.mcpLink) {
     const linked = agentList.filter((a) => a.linked);
     for (const a of linked) rows.push({ group: AGENTS_GROUP, icon: a.icon, label: a.label, keepOpen: true,
@@ -99,15 +99,6 @@ function agentsRows(q) {
 function openAgentsPalette() {
   loadAgentList().then(() => { if (palMode === 'agents') renderPalette(); });
   openPage('agents', 'Choose agents', { rows: agentsRows, back: BACK_TO_COMMANDS });
-}
-function defaultAgentRows(q) {
-  const rows = agentsOn().map((a) => ({ group: DEFAULT_GROUP, icon: a.icon, label: a.label, hint: a.isDefault ? '✓' : '', keepOpen: true,
-    run: () => agentsApply(() => tana.setDefaultAgent(a.id)) }));
-  return matchRows(rows, q);
-}
-function openDefaultAgentPalette() {
-  loadAgentList().then(() => { if (palMode === 'defaultAgent') renderPalette(); });
-  openPage('defaultAgent', 'Set default agent', { rows: defaultAgentRows, back: BACK_TO_COMMANDS });
 }
 // ---- Connect your personal agent: first which agent, then only its steps, then one code that links it ----
 // (main/agents/linked.js) The first page asks which agent: your OpenAI Dot in ChatGPT, or any other agent that speaks MCP.
@@ -154,7 +145,11 @@ function pollConnect(ctx) {
         return showNote('Linked ' + s.agent.label + (s.agent.app ? ' · ' + s.agent.app : ''));
       }
       ctx.state = s.state;
-    } catch { /* a missed answer: the next one asks again */ }
+      ctx.misses = 0;
+    } catch (e) { // a missed answer: the next one asks again, but one that keeps failing is said, not waited on for ever
+      if (connectCtx !== ctx) return;
+      if ((ctx.misses = (ctx.misses || 0) + 1) >= 3) { ctx.state = 'failed'; ctx.error = errorText(e); }
+    }
     drawConnect();
     if (ctx.state === 'waiting') pollConnect(ctx);
   }, 2000);
@@ -190,7 +185,7 @@ function connectRows() {
     run: () => run(() => copyText(c.prompt, 'Copied: send them to your agent')) },
   { group, icon: 'link', label: 'Copy the code', hint: 'Only the code · works once', keepOpen: true, match: [], run: () => run(() => copyText(c.code, 'Code copied')) },
   // what crosses orbital.md (main/agents/linked.js send): with each event the node's id, the request and how to handle it, kept nowhere
-  { group, label: 'Only the node\'s id and your request go through ' + serverHost(c.url) + ', and it keeps neither: the node\'s words stay in Tana, where your agent reads them with its own Tana access.', note: true, wrap: true, disabled: true, match: [] });
+  { group, icon: 'mcp', label: relayWords(c.url, c.workspace), note: true, wrap: true, disabled: true, match: [] });
   // the wait sits in the same group: no heading of its own, and no glyph, only its words with the light passing over them
   if (c.state === 'expired' || !left) return [...rows, { group, label: 'The code expired', hint: 'Nobody used it', disabled: true, bare: true, match: [] }, { ...again, group, label: 'Get a new code', match: [] }];
   return [...rows,
@@ -208,6 +203,17 @@ function seenText(at) {
 // everyone hands over through (orbital.md unless the workspace hosts its own). A member sees it, and who set it, and changes nothing.
 let serverNow = null; // what main said last: { url, workspace, admin, deploy, fallback, changedBy, … }
 const serverHost = (url) => String(url || 'orbital.md/mcp').replace(/^https?:\/\//, '');
+// What goes through the Orbital MCP server, said wherever an agent is linked, handed something or written to (the phones say
+// the same, ios/Orbital/Agents.swift and ui/Agents.kt): on orbital.md that is Orbital's relay, run by us, unless the workspace
+// hosts its own (main/mcp-server.js server.base). relayVia is the short form, relayWords the whole of it.
+const relayHost = (url) => serverHost(url).replace(/\/.*$/, '');
+const relayOurs = (url, workspace) => !workspace && relayHost(url) === 'orbital.md';
+const relayVia = (url, workspace) => 'Goes through ' + relayHost(url) + (relayOurs(url, workspace) ? ', Orbital\'s relay, run by us' : workspace ? ', your workspace\'s own server' : '');
+const relayWords = (url, workspace) => 'Everything you send your agent goes through ' + relayHost(url) + (relayOurs(url, workspace) ? ', Orbital\'s relay, run by us' : workspace ? ', your workspace\'s own Orbital MCP server' : '')
+  + ': a node\'s id and your request with each task. A node\'s words stay in Tana, where your agent reads them with its own access.'
+  + (relayOurs(url, workspace) ? ' Host your own Orbital MCP server to keep all of it in your workspace.' : '');
+// the MCP server in use, asked once for the pages that name it before Connect your personal agent has (serverNow)
+function relayKnown(mode) { if (!serverNow && tana.mcpWhere) tana.mcpWhere().then((w) => { serverNow = w; if (palMode === mode && !palette.hidden) renderPalette(); }, () => {}); return serverNow || {}; }
 const ORG_TITLE = 'Orbital Settings for Tana Workspace';
 const asking = (group) => [{ group, label: 'Asking…', disabled: true, sweep: true, bare: true, match: [] }];
 const noteRow = (group, icon, label) => ({ group, icon, label, note: true, wrap: true, disabled: true, match: [] });
@@ -303,73 +309,80 @@ function openLinkedAgent(id) {
 function linkedAgentRows(q) {
   const a = agentNamed(linkedCtx);
   if (!a) return [{ group: 'Linked agent', icon: 'link', label: 'Not linked any more', disabled: true }];
-  const group = [a.label, a.app ? 'through ' + a.app : '', seenText(a.seenAt) || 'not seen yet'].filter(Boolean).join(' · ');
+  const group = [a.label, a.app ? 'through ' + a.app : '', seenText(a.seenAt) || 'not seen yet'].filter(Boolean).join(' · '), w = relayKnown('linkedAgent');
   const rows = [
     { group, icon: 'field', label: 'Rename …', keepOpen: true, run: () => openRenameAgent(a) },
-    { group, icon: a.enabled ? 'hidden' : 'visible', label: a.enabled ? 'Switch off' : 'Switch on', hint: a.enabled ? 'Stays linked, left out of Assign to Agent' : 'Back in Assign to Agent', keepOpen: true,
+    { group, icon: a.enabled ? 'hidden' : 'visible', label: a.enabled ? 'Switch off' : 'Switch on', hint: a.enabled ? 'Stays linked, not offered to assign to' : 'Offered to assign to again', keepOpen: true,
       run: () => agentsApply(() => tana.enableAgent(a.id, !a.enabled)) },
-    { group, icon: 'trash', label: 'Unlink', hint: 'It can no longer take tasks from Orbital', keepOpen: true,
-      run: () => run(async () => { agentList = await tana.mcpUnlink(a.id); loadAgentIds(); showNote('Unlinked ' + a.label); openAgentsPalette(); }) }, // its nodes were unassigned too
+    { group, icon: 'trash', label: 'Unlink …', hint: 'It can no longer take tasks from Orbital', keepOpen: true, run: () => confirmUnlink(a) },
+    { group, icon: 'mcp', label: relayWords(w.url, w.workspace), note: true, wrap: true, disabled: true }, // what goes through the MCP server, and whose it is
   ];
   return matchRows(rows, q);
+}
+// Unlinking unassigns the nodes handed to it and needs a new code to undo: asked first, as Settings' Unlink asks
+function confirmUnlink(a) {
+  const group = 'Unlink ' + a.label + '? Its nodes are unassigned', back = () => openLinkedAgent(a.id);
+  const rows = [
+    { group, icon: 'trash', label: 'Unlink', hint: 'Linking again needs a new code', run: () => run(async () => { agentList = await tana.mcpUnlink(a.id); loadAgentIds(); showNote('Unlinked ' + a.label); openAgentsPalette(); }) },
+    { group, label: 'Cancel', keepOpen: true, run: back },
+  ];
+  openPage('unlinkAgent', 'Unlink ' + a.label + '?', { back, rows: (q) => matchRows(rows, q) });
 }
 function openRenameAgent(a) {
   namePage('renameAgent', 'Its name in Orbital', { group: 'Rename ' + a.label + ' · ↩ saves', icon: 'field', back: () => openLinkedAgent(a.id), empty: 'Type its new name' },
     (name) => ({ label: 'Rename to “' + name + '”', keepOpen: true, match: [], run: () => run(async () => { agentList = await tana.mcpRename(a.id, name); openLinkedAgent(a.id); }) }), a.label);
 }
-// ---- linking a node to a task that already exists in an agent's app (#143) ----
-// Pasted rather than picked: Codex's Copy link gives codex://threads/<id>, Claude's session is its id. Main reads the
-// paste (each agent knows its own shape) and stores the link; the badge and Go to task then work as for an assignment.
-let agentLinkCtx = null; // { doc, agent } the pasted link is for, while this page is up
-function agentLinkRows(q, typed) {
-  const { doc, agent } = agentLinkCtx || {}, group = 'Link ' + agent.label + ' task · paste its link or id';
-  if (!typed.trim()) return [{ group, icon: agent.icon, label: 'Paste the task link from ' + agent.label, disabled: true }];
-  return [{ group, icon: agent.icon, label: 'Link to this ' + agent.label + ' task', keepOpen: true, run: () => run(async () => {
-    await tana.linkAgentTask(doc.id, agent.id, typed.trim()); // main refuses what is not one of this agent's links, and says so
-    agentIds.add(doc.id);
-    closePalette(); patchAgent(doc.id); loadAgentStates();
-  }) }];
-}
-function openAgentLink(doc, agent) {
-  agentLinkCtx = { doc, agent };
-  openPage('agentLink', agent.id === 'codex' ? 'codex://threads/…' : agent.label + ' session id', { rows: agentLinkRows, back: BACK_TO_COMMANDS, typed: true });
-}
 // ---- assigning a node to an agent: the prompt page, one level down in Cmd+K ----
-// "Assign to Agent" does not assign: it advances to this page, where the palette's single-line field is swapped for a
+// "Assign to <agent> …" does not assign: it advances to this page, where the palette's single-line field is swapped for a
 // few lines of text. The node is the context, so the page asks only what to do with it. ↩ is an ordinary newline
 // here, ⌘↩ assigns, Esc cancels the assignment and closes the palette without writing anything. The row below the
-// editor is the same action as ⌘↩, so it can be clicked, and it reports why a blank prompt cannot be sent. Under it,
-// the agents that are on, the default ticked: the agent's own default model does the work, so there is nothing else
-// to choose.
+// editor is the same action as ⌘↩, so it can be clicked, and it reports why a blank prompt cannot be sent. Opened
+// without an agent named (a drop on the Agent group), the agents that are on are listed under it, the first ticked.
 let agentCtx = null; // { id } of the node the prompt being typed belongs to, while this page is up
-const AGENT_GROUP = 'Assign to Agent · ↩ adds a line, ⌘↩ assigns, Esc cancels';
+const AGENT_GROUP = 'Assign · ↩ adds a line, ⌘↩ assigns, Esc cancels';
+// where each built-in agent takes a node, the hint on its Assign to … row (an agent linked through the MCP server says that)
+const AGENT_WHERE = { tana: 'A Tana chat, answered by Tana\'s AI', codex: 'Into your latest ChatGPT chat, or a new one' };
 const PICK_GROUP = 'Agent';
+// ChatGPT's choice of chat: your latest on this Mac (null, the default) or a new one ('new'); only with a chat to go to
+const CHAT_GROUP = 'Chat';
+let agentChatPick = null;
+const latestAgentChat = () => agentChatsKnown.find((n) => !(n.agentChat && n.agentChat.elsewhere)) || null; // the list is newest first
 function promptEditor(on) {
   palText.hidden = !on; palInput.hidden = !!on;
   if (!on) { palText.value = ''; agentCtx = null; palInput.type = 'text'; }
 }
-function openAgentPrompt(doc, pick) {
+// back: the page it was opened from (an assignee page), which Esc returns to; none, and Esc cancels the whole palette
+function openAgentPrompt(doc, pick, back) {
   // No back: Escape cancels the whole thing rather than stepping back a level. The page was opened to answer one
   // question, and abandoning that question is abandoning the assignment. Nothing is written either way.
-  showPage('agentPrompt', '', { rows: agentPromptRows, typed: true }); // the query that found "Assign to Agent" is not a query here, and would bold letters in the row
+  showPage('agentPrompt', '', { rows: agentPromptRows, typed: true, ...(back ? { back: () => { promptEditor(false); back(); } } : {}) }); // the query that found "Assign to …" is not a query here, and would bold letters in the row
   promptEditor(true); // shows the editor, empty; leaving the page clears it and the context with it
   agentCtx = { id: doc.id, doc, fixed: !!pick }; // the row itself, so the assignment can hold it where it sits; fixed: its row named the agent
-  // it starts on the agent its row named (Assign to Echo …), or else on the default
-  agentPick = (agentsOn().find((a) => a.id === pick) || agentsOn().find((a) => a.isDefault) || agentsOn()[0] || { id: 'tana' }).id;
+  agentPick = (agentsOn().find((a) => a.id === pick) || agentsOn()[0] || { id: 'tana' }).id;
+  agentChatPick = null;
   renderPalette(); palText.focus();
 }
 function agentPromptRows() {
   const prompt = palText.value.trim(), label = (agentNamed(agentPick) || {}).label || 'Agent';
   // The agent it goes to is named on the row that sends it: the tick sits in a list you have to Tab into, so ⌘↩ from
   // the editor is the only thing most assignments see.
-  const rows = [{ group: AGENT_GROUP, icon: 'robot', label: prompt ? 'Assign to ' + label : 'What should ' + label + ' do?',
+  const rows = [{ group: AGENT_GROUP, icon: (agentNamed(agentPick) || {}).icon || 'robot', label: prompt ? 'Assign to ' + label : 'What should ' + label + ' do?',
     hint: prompt ? '⌘↩' : 'Nothing to send yet', disabled: !prompt, keepOpen: true, run: submitAgentPrompt }];
-  // Only with a choice to make: Tana alone needs no list. Choosing keeps the keyboard where it was: picked from the
-  // list, the list keeps it so another can be tried; clicked or reached from the editor, the caret goes back.
+  // to an agent linked through the MCP server, the request goes through it: said under the row that sends it
+  if (String(agentPick).startsWith('relay:')) { const w = relayKnown('agentPrompt'); rows.push({ group: AGENT_GROUP, icon: 'mcp', label: relayVia(w.url, w.workspace), note: true, disabled: true }); }
+  // Choosing keeps the keyboard where it was: picked from a list, the list keeps it; clicked or reached from the editor, the caret goes back
+  const choose = (set) => () => { const onList = document.activeElement === palList; set(); renderPalette(); (onList ? palList : palText).focus(); };
+  // Only with a choice to make: Tana alone needs no list.
   // Not when the row that opened the page already named the agent (Assign to Echo …): the choice is made
   const on = agentCtx && agentCtx.fixed ? [] : agentsOn();
   if (on.length > 1) for (const a of on) rows.push({ group: PICK_GROUP, icon: a.icon, label: a.label, hint: agentPick === a.id ? '✓' : '', keepOpen: true,
-    run: () => { const onList = document.activeElement === palList; agentPick = a.id; renderPalette(); (onList ? palList : palText).focus(); } });
+    run: choose(() => { agentPick = a.id; }) });
+  // ChatGPT: into your latest chat, ticked, or a new one; with no chat yet there is nothing to choose. Last, so picking
+  // ChatGPT in the list above adds them below it and leaves the highlight where it was
+  const latest = agentPick === 'codex' && latestAgentChat();
+  if (latest) rows.push(
+    { group: CHAT_GROUP, icon: latest.icon || 'chatgpt', label: demoText(latest.title, latest.id), hint: (agentChatPick ? '' : '✓ ') + 'Latest', keepOpen: true, run: choose(() => { agentChatPick = null; }) },
+    { group: CHAT_GROUP, icon: 'chatgpt', label: 'New chat', hint: agentChatPick ? '✓' : '', keepOpen: true, run: choose(() => { agentChatPick = 'new'; }) });
   return rows;
 }
 // The prompt is written with the assignment, so a node is never marked as the agent's with no idea of what it was handed.
@@ -381,9 +394,11 @@ function submitAgentPrompt() {
     // may now sort elsewhere. Held, it keeps the place it had — nothing jumps away from the pointer — and the Clean
     // up pill appears to redraw the list where the row now belongs, exactly as a status change behaves.
     if (doc) holdRow(doc);
-    await tana.setAgent(id, true, prompt, agentPick);
+    const newChat = agentPick === 'codex' && (agentChatPick === 'new' || !latestAgentChat());
+    await tana.setAgent(id, true, prompt, agentPick, agentPick === 'codex' ? { newChat: agentChatPick === 'new' } : undefined);
     // Only now: an agent that could not take it leaves the page exactly as it was, so the press can simply be repeated.
     closePalette();
+    if (agentPick === 'codex') showNote(newChat ? 'Sent to ChatGPT, in a new chat' : 'Sent to ChatGPT, in your latest chat'); // nothing opens: say where it went
     agentIds.add(id);
     patchAgent(id);
     loadAgentStates(); // the task exists now: ask what it is doing rather than waiting for the next refresh
@@ -399,7 +414,7 @@ function agentPromptKey(e) {
   const mod = e.metaKey || e.ctrlKey;
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); return true; }
   if (e.key === 'Enter' && mod) { e.preventDefault(); e.stopPropagation(); submitAgentPrompt(); return true; }
-  // ⇥ crosses to the agent list and back, so the choice is reachable without leaving the keyboard. The editor eats
+  // ⇥ crosses to the choices (the chat, the agent) and back, so they are reachable without leaving the keyboard. The editor eats
   // Tab either way — a tab character in a prompt is not what anyone means by pressing it here.
   if (e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); focusAgentRows(); return true; }
   return false; // a plain ↩ is a newline, which the textarea does by itself
@@ -407,7 +422,7 @@ function agentPromptKey(e) {
 // The agent rows take the keyboard as a group: the list itself holds the focus, and the highlighted row is the one
 // the palette already draws, so this borrows the navigation every other level uses rather than inventing one.
 function focusAgentRows() {
-  const first = palRows.findIndex((r) => r.group === PICK_GROUP);
+  const first = palRows.findIndex((r) => r.group === CHAT_GROUP || r.group === PICK_GROUP);
   if (first < 0) return;
   palIndex = first;
   palList.tabIndex = -1;
@@ -419,6 +434,7 @@ function agentRowsKey(e) {
   if (e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); palText.focus(); return true; } // back to what you were writing
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); return true; }
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); movePalIndex(e.key === 'ArrowDown' ? 1 : -1); palList.focus(); return true; }
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); e.stopPropagation(); submitAgentPrompt(); return true; } // ⌘↩ assigns, wherever the keyboard is
   if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); runRow(palRows[palIndex]); return true; }
   return false;
 }

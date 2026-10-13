@@ -1,13 +1,12 @@
 'use strict';
 // The agents' plugins, loaded in the order Choose agents lists them, and what the renderer asks of them (issue #669).
 // An agent is one file in this folder that registers itself with main/agent.js; delete its line below and the app
-// has no trace of it. Assigning is shared: the "Agent context" block is written into the node and the app-local mark
+// offers it nowhere (ChatGPT's chats, main/agentchats.js, are their own feature). Assigning is shared: the "Agent context" block is written into the node and the app-local mark
 // stored (main/documents.js setAgentMark), then the agent the page chose starts the task, or hands the new request
 // to the task the node already has with it.
 const agent = require('../agent');
 require('./tana');
 require('./codex');
-require('./claude');
 const linked = require('./linked'); // the agents linked through orbital.md/mcp (your Dot), one plugin each, as they come and go
 const { agentIds, setAgentMark, agentPrompt, agentStatus, dropAgentMark, mut } = require('../documents');
 const mcpServer = require('../mcp-server'); // the node put back as an earlier handoff left it (putBack)
@@ -22,7 +21,8 @@ const ready = (id) => { const a = agent.get(id); if (!a || !agent.usable(id)) th
 // else starts a new task. A handoff that fails leaves no mark behind on a node that had none: the mark is a synced
 // setting, so it would reach the other machines as a pending badge for work nobody took. On a node that had one, it
 // puts back what was there (restore below): its task link still names the earlier request.
-async function assign(id, prompt, agentId = agent.defaultAgent()) {
+// options: what the Assign page chose beyond the agent (ChatGPT: newChat, a chat of its own rather than your latest)
+async function assign(id, prompt, agentId, options = {}) {
   const a = ready(agentId), was = agentIds().includes(id);
   const held = was && agent.taskLink(id), heldBy = held && agent.get(held.agent);
   const before = was ? { prompt: agentPrompt(id), linked: !!(heldBy && heldBy.linked) } : null;
@@ -39,11 +39,12 @@ async function assign(id, prompt, agentId = agent.defaultAgent()) {
     if (link && link.agent === agentId && a.resume && !agent.elsewhere(link)) await a.resume(link.taskId, prompt);
     else {
       started = true;
-      const taskId = await a.start({ key: id, nodeUri: id, title, prompt, userData: S.userData, was: before });
+      // a task id, or { taskId, turnId } from an agent whose tasks share a thread (ChatGPT's chats)
+      const task = await a.start({ key: id, nodeUri: id, title, prompt, userData: S.userData, was: before, newChat: !!(options && options.newChat) });
       // the task this node had with another agent is let go once the new one exists; never the same agent's, whose
       // plugin now holds the new task under this node's key
       if (link && link.agent !== agentId) await releaseLink(id, link);
-      agent.setTask(id, agentId, taskId);
+      agent.setTask(id, agentId, task && typeof task === 'object' ? task.taskId : task, task && task.turnId);
     }
     return result;
   } catch (error) {
@@ -77,28 +78,33 @@ async function unassign(id) {
 }
 // One read per agent for every linked node, shared by the pages that ask while it runs (issue #267): every page asks
 // on every refresh, and a Codex read is an app-server child.
-let reading = null;
-async function readStatuses() {
-  // the Dot an older build typed into the ChatGPT app is no agent any more: its nodes let go of it, and of its chat
-  // (the stored links: agent.links() leaves out those of an agent nobody registers, which is what these are)
+let reading = null, tidied = false;
+// What older builds left in the synced settings, cleared once a session, on the first read (after they are hydrated):
+// the Dot an older build typed into the ChatGPT app is no agent any more, so its nodes let go of it (the stored links:
+// agent.links() leaves out those of an agent nobody registers), and its chat and the default agent are gone
+function tidy() {
+  if (tidied || !S.client) return; tidied = true; // only once Tana is there to take the clearing: before, the next hydrate would bring them back
   for (const [nodeId, stored] of Object.entries(agent.tasks())) if (stored && stored.agent === 'dot') { dropAgentMark(nodeId); agent.clearTask(nodeId); }
-  if (settings.get('dotChat') !== undefined) settings.set('dotChat', undefined);
+  for (const key of ['dotChat', 'defaultAgent']) if (settings.get(key) !== undefined) settings.set(key, undefined);
+}
+async function readStatuses() {
+  tidy();
   const before = agent.links();
-  const byAgent = {};
+  const byAgent = {}, full = {};
   const out = {};
   for (const [nodeId, link] of Object.entries(before)) {
     if (agent.elsewhere(link)) out[nodeId] = 'elsewhere'; // on the Mac that ran it, where its state lives (renderer AGENT_BADGE)
-    else (byAgent[link.agent] ||= {})[nodeId] = link.taskId;
+    else { (byAgent[link.agent] ||= {})[nodeId] = link.taskId; (full[link.agent] ||= {})[nodeId] = link; }
   }
   for (const [id, links] of Object.entries(byAgent)) {
     const a = agent.get(id);
-    try { Object.assign(out, a.statuses ? await a.statuses(links) : {}); }
+    try { Object.assign(out, a.statuses ? await a.statuses(links, full[id]) : {}); } // the whole links too: a turn of its own (ChatGPT)
     catch { for (const nodeId of Object.keys(links)) out[nodeId] = 'broken'; }
   }
   // a node assigned, relinked or unlinked while this read ran is left out rather than given its old task's state:
   // the pages sharing this read draw it pending until the next one (#671 review)
   const now = agent.links();
-  for (const nodeId of Object.keys(out)) if (!now[nodeId] || now[nodeId].agent !== before[nodeId].agent || now[nodeId].taskId !== before[nodeId].taskId) delete out[nodeId];
+  for (const nodeId of Object.keys(out)) if (!now[nodeId] || now[nodeId].agent !== before[nodeId].agent || now[nodeId].taskId !== before[nodeId].taskId || now[nodeId].turnId !== before[nodeId].turnId) delete out[nodeId];
   return out;
 }
 
@@ -106,25 +112,11 @@ const changed = (e, id) => { settings.tellOthers(pageOf(e), id); };
 const ipc = {
   'agent:list': () => { linked.refreshSoon(); return agent.list(); }, // the MCP server's list is asked for now and then, and the pages told when it moved
   'agent:enable': (e, id, on) => { const out = agent.setEnabled(id, !!on); changed(e); return out; },
-  'agent:default': (e, id) => { const out = agent.setDefault(id); changed(e); return out; },
   'agent:ids': () => agentIds(),
-  'agent:set': async (e, id, on, prompt, agentId) => {
+  'agent:set': async (e, id, on, prompt, agentId, options) => {
     if (typeof id !== 'string' || !NODE.test(id)) throw new Error('Not a Tana node');
     if (on && isId(id, 'search')) throw new Error('A saved search is a view: assign one of its tasks');
-    const result = on ? await assign(id, prompt, agentId) : await unassign(id);
-    changed(e, id);
-    return result;
-  },
-  // A task that already exists in that agent's app, pasted as its link or id. The node takes the mark as an
-  // assignment does; no task is started and nothing is written to the node.
-  'agent:link': async (e, id, agentId, text) => {
-    if (typeof id !== 'string' || !NODE.test(id)) throw new Error('Not a Tana node');
-    const a = ready(agentId), taskId = a.linkId ? a.linkId(text) : null;
-    if (!taskId) throw new Error('Paste a ' + a.label + ' task link');
-    const result = await setAgentMark(id, true);
-    const previous = agent.taskLink(id);
-    if (!previous || previous.taskId !== taskId) await releaseLink(id, previous);
-    agent.setTask(id, agentId, taskId);
+    const result = on ? await assign(id, prompt, agentId, options) : await unassign(id);
     changed(e, id);
     return result;
   },
@@ -138,13 +130,6 @@ const ipc = {
     if (agent.elsewhere(link)) throw new Error('This ' + a.label + ' task is on another Mac: open it there');
     await a.open(link.taskId);
     return true;
-  },
-  // Open in <agent>: a fresh task with the node's link, nothing tracked (Assign to Agent is the tracked one)
-  'agent:openNew': (_e, agentId, link) => {
-    if (typeof link !== 'string' || !/^https:\/\//.test(link)) throw new Error('Not a link');
-    const a = ready(agentId);
-    if (!a.openNew) throw new Error(a.label + ' cannot open a link');
-    return a.openNew(link);
   },
   ...linked.ipc,
 };

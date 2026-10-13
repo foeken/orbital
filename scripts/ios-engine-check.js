@@ -243,8 +243,8 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
     assert.match(settings.get('relayKey'), /^[\w-]{43}$/, 'your Orbital made from the phone: its key in the synced settings, so the Mac is the same Orbital');
     const linked = JSON.parse(await api.linkStatus('ABCD-1234'));
     assert.deepStrictEqual(linked.agent, { id: ID, name: 'Echo', app: 'ChatGPT' });
-    assert.deepStrictEqual([settings.get('agents'), settings.get('defaultAgent')], [['codex', ID], ID], 'linked, it is on and the default, Codex left on as the Mac had it');
-    assert.deepStrictEqual(JSON.parse(await api.agents()).agents, [{ id: ID, name: 'Echo', app: 'ChatGPT', seenAt: null, on: true, isDefault: true }]);
+    assert.deepStrictEqual(settings.get('agents'), ['codex', ID], 'linked, it is on, Codex left on as the Mac had it');
+    assert.deepStrictEqual(JSON.parse(await api.agents()).agents, [{ id: ID, name: 'Echo', app: 'ChatGPT', seenAt: null, on: true }]);
 
     // a node a Mac handed to Codex: its request block, its mark and its link
     mcpServer.writeContext(doc, 'Summarise the venues');
@@ -280,15 +280,12 @@ const bun = [path.join(os.homedir(), '.bun/bin/bun'), 'bun'].find((b) => spawnSy
     assert.deepStrictEqual(lines(), ['Venue options'], 'Unassign takes the status line out');
     assert.deepStrictEqual([settings.get('codex'), settings.get('codexTask')[doc.id], agentOf(doc.id, doc)], [[], undefined, null], 'and the mark and the link');
 
-    // Settings' swipes: Make Default switches an agent that was off on as well; Unlink lets it go at the MCP server, switches it
-    // off, makes it no one's default and unassigns its nodes, status line and all
-    settings.set('agents', ['codex']); settings.set('defaultAgent', null);
-    assert.deepStrictEqual(JSON.parse(await api.setDefault(ID)).map((a) => [a.on, a.isDefault]), [[true, true]], 'made the default, and on');
+    // Settings' swipe: Unlink lets it go at the MCP server, switches it off and unassigns its nodes, status line and all
     await api.handTo(doc.id, ID, 'Book the venue');
     assert.deepStrictEqual(JSON.parse(await api.unlink(ID)), [], 'unlinked: the MCP server no longer lists it');
     assert.ok(unlinked, 'the MCP server was told');
-    assert.deepStrictEqual([settings.get('agents'), settings.get('defaultAgent'), settings.get('codex'), settings.get('codexTask')[doc.id], lines()], [['codex'], null, [], undefined, ['Venue options']],
-      'off, no longer the default, and its node unassigned with its status line gone');
+    assert.deepStrictEqual([settings.get('agents'), settings.get('codex'), settings.get('codexTask')[doc.id], lines()], [['codex'], [], undefined, ['Venue options']],
+      'off, and its node unassigned with its status line gone');
     Object.assign(S, { me: was.me, client: was.client, settingsReadOnly: was.readOnly });
   }
 

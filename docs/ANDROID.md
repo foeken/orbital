@@ -116,7 +116,7 @@ to opening and asking:
   task (App Actions `CREATE_THING`) is one of these: a request you made, landing in Quick Add rather than writing. Links
   that only open (`<id>`, `timeline`, `add`) are the same from anyone. `LinkTest` and the device test
   `SampleJourneyTest.anotherAppsWriteLinkOpensWhereYouCanMakeItAndWritesNothing` hold it.
-- **The launch extras** (`sample`, `demoMode`, `history`, `zoom`, `settings`, `add`, `menu`, `menudemo`: design shots,
+- **The launch extras** (`sample`, `demoMode`, `history`, `zoom`, `settings`, `connect`, `add`, `menu`, `menudemo`: design shots,
   the device tests and `adb shell am start`, README.md) count only on a debug build (`MainActivity.tooling`). A release
   opened by another app with them opens as it always does.
 - **The engine's bridge** answers only Tana's session page in the main frame (security review finding 6; `Bridge.trusted`,

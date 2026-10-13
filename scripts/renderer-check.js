@@ -276,7 +276,6 @@ assert.match(source, /blockSelection\(keys, true, 'Move'\)/, 'while moving it st
 assert.match(source, /tana\.setStateMany\(ctx\.docs\.map\(\(doc\) => doc\.id\), state\)/);
 assert.match(source, /tana\.setAssigneesMany\(ctx\.docs\.map\(\(doc\) => doc\.id\), uris\)/);
 assert.match(source, /const rows = \[\.\.\.selection\];/, 'what acts on the selection comes before everything else in Cmd+K');
-assert.match(source, /id: a\.id === 'codex' \? 'sendToAgent' : 'openIn' \+ a\.label[^\n]*label: 'Open in ' \+ a\.label[\s\S]*?tana\.openInAgent\(a\.id, await tana\.nodeLink\(doc\.id\)\)/, 'Open in <agent> hands that agent the current node link, and Codex keeps the id a recorded key finds');
 // the current document's own actions (pins, link, icon, visibility, location) follow under the same heading, before the views
 assert.ok(source.indexOf("const docGroup = selection.length && selection[0].group === 'Selection' ? 'Current page' : 'Current node';") < source.indexOf("const viewRows = views.map((s) => ({ id: 'view:'"), 'the document actions join the Current node group ahead of the views');
 assert.match(source, /if \(tana\.onRemoved\) tana\.onRemoved\(removeStale\);/);
@@ -480,7 +479,7 @@ async function mockCreationPermissionCheck() {
 // the date-node creators missing from DEMO_WRITES. And the mock answers it or NOT_MOCKED says it does not; a mock that
 // fell behind broke the manual's scenes (#671, #607). A new call fails here until it is put in one list of each pair.
 // docs/TESTING.md has the reasoning.
-const DEMO_SAFE = new Set([
+const DEMO_SAFE = new Set(['agentChats', 'agentChatInfo', 'openAgentChat', 'onAgentChatChanged', 'stopAgentChat', // agent chats: the list, Codex opened, the change signal, an answer stopped (nothing written)
   'accessOptions', 'androidRelease', 'activateWindow', 'addFilter', 'agentIds', 'agentList', 'agentReplies', 'agentStatus',
   'agentTasks', 'aiOptions', 'archivedTypes', 'attendeeSuggestions', 'cancelUpload', 'chatAgents', 'chatAnswers',
   'chatgptCancel', 'chatgptLogin', 'chatgptLogout', 'chatgptStatus', 'checkUpdates', 'children', 'claimHelp',
@@ -489,11 +488,11 @@ const DEMO_SAFE = new Set([
   'mcpHidden', 'meetingInfo', 'members', 'readMeetingTime', 'myTasks', 'newWindow', 'node', 'nodeLink', 'notifyState', 'onChanged',
   'onChatGPTStatus', 'onFeatureFlags', 'onInbox', 'onNotifyOpen', 'onOverlayClosed', 'onPresence', 'onPresenceAsk', 'onRelatedChanged',
   'onReleased', 'onRemoved', 'onSettings', 'onStatus', 'onSystemTheme', 'onTimelinePart', 'onUpdateProgress',
-  'openAgentAsk', 'openAgentTask', 'openCanvas', 'openExternal', 'openInAgent', 'openOverlay', 'openSettings', 'pinDates', 'pinIds',
+  'openAgentAsk', 'openAgentTask', 'openCanvas', 'openExternal', 'openOverlay', 'openSettings', 'pinDates', 'pinIds',
   'pinState', 'prefs', 'prefsNow', 'presenceClose', 'presenceOpen', 'presenceSet', 'presenceView', 'previewMove',
   'refresh', 'related', 'relatedWatch', 'mcpLink', 'mcpLinkCancel', 'mcpLinkStatus', 'mcpRefresh', 'mcpRename', 'mcpReset', 'mcpWhere', 'mcpOld', 'mcpCheck',
   'rememberPlace', 'removeFilter', 'roots', 'search', 'searchFilter',
-  'searchIcons', 'searchPreview', 'searchSpaces', 'searches', 'sensitiveIds', 'setAiOption', 'setDefaultAgent', 'setFeatureFlag', 'settingsSize',
+  'searchIcons', 'searchPreview', 'searchSpaces', 'searches', 'sensitiveIds', 'setAiOption', 'setFeatureFlag', 'settingsSize',
   'setDemoMode', 'setMcpHidden', 'setOpenAIKey', 'setOpenAIRegion', 'setPref', 'setViewFilter', 'setWindowLayout', 'splitWindow',
   'status', 'suggestDiscussWith', 'suggestSensitive', 'summaryUri', 'systemTheme', 'taskMeta', 'taskTypes', 'timelinePages', 'todayNode',
   'translate', 'typeIcons', 'typeList', 'updateInfo', 'viewFilter', 'viewList', 'weekNode', 'windowLayout',
@@ -570,7 +569,7 @@ assert.match(source, /if \(viewFiltered\(\)\) \{/);
 assert.match(source, /if \(!zoom \|\| onSearchPage\(\) \|\| onTypePage\(\)\) rows\.push\(\{ id: 'filter'/, 'a saved search page and a type page offer the filter row, so ⌘F reaches them');
 // A key recorded for a row that is listed but off (Clean up with nothing held, Go back with no history) is answered
 // by doing nothing, rather than falling through to whatever else the combo might mean: one command, one meaning.
-assert.match(source, /if \(row\) \{ if \(!row\.disabled\) row\.run\(\); return true; \}/, 'a hotkey for a disabled row is a no-op the app still owns');
+assert.match(source, /if \(row\) \{ if \(row\.disabled\) return true;/, 'a hotkey for a disabled row is a no-op the app still owns');
 // and the palette's own arrows land on such a row, which is the only way Cmd+Shift+K can record a shortcut for it
 assert.match(source, /if \(!rows\[next\]\.disabled \|\| rows\[next\]\.id\) return next;/, 'Up/Down reach a disabled row that has a stable id, so it can be given a key before it goes live');
 // (shown and hidden through showHide, which opens and closes it in place: renderer/motion.js)
@@ -627,16 +626,16 @@ assert.doesNotMatch(source, /\.style\.cssText \+?= (?!'';)/, 'the renderer sets 
 assert.doesNotMatch(source, /\.style\.(?!display\b)[a-zA-Z]+ = '[^']+';/, 'the renderer sets no fixed inline style: give the element a class in styles.css');
 assert.match(styleSheet, /\.tmeta > \.ticon:not\(:first-child\) \{ margin-left: 6px; \}/, 'a row\u2019s facts stand 6px apart, the first one against the .meta span\u2019s own 8px');
 // The agent prompt page is an editor, not a list to search: it never says "No results" under its one row, and the
-// query that found "Assign to Agent" is cleared on the way in, or its letters would show as bold in that row.
+// query that found "Assign to …" is cleared on the way in, or its letters would show as bold in that row.
 // "Discuss with …" is the same shape — what is typed *is* the row — so it is skipped too, or every name typed
 // would be answered with "No results" under the row offering to write it. The field pages (renderer/fields.js) say
 // what they found, or why they have nothing, in rows of their own.
 assert.match(source, /&& !palPage\.typed && \(palMode === 'cmd'/, 'the no-results line skips the pages whose row is what was typed');
-for (const typed of [/showPage\('agentPrompt', '', \{ rows: agentPromptRows, typed: true \}\)/, /openPage\('discuss', 'Discuss with…', \{ rows: discussRows, back: BACK_TO_COMMANDS, typed: true \}\)/, /openPage\('field', placeholder, \{ rows, back, keys, typed: true \}, text\)/, /openPage\(mode, placeholder, \{ rows: \{ meetingTime[^\n]*typed: true \}\)/]) assert.match(source, typed, 'and those pages say so');
+for (const typed of [/showPage\('agentPrompt', '', \{ rows: agentPromptRows, typed: true\b/, /openPage\('discuss', 'Discuss with…', \{ rows: discussRows, back: BACK_TO_COMMANDS, typed: true \}\)/, /openPage\('field', placeholder, \{ rows, back, keys, typed: true \}, text\)/, /openPage\(mode, placeholder, \{ rows: \{ meetingTime[^\n]*typed: true \}\)/]) assert.match(source, typed, 'and those pages say so');
 // The Timeline's task rows show their agent badge as every list does (it used to be hidden there by a style); a line
 // about what happened has an id of its own, so it has none
 assert.doesNotMatch(fs.readFileSync(require('node:path').join(__dirname, '..', 'styles.css'), 'utf8'), /\.node\.tl \.cbadge \{ display: none/, 'which no style hides on the Timeline');
-assert.match(source, /function openAgentPrompt\(doc(, pick)?\) \{[\s\S]{0,400}showPage\('agentPrompt', '', \{/, 'opening the prompt page clears the query behind it');
+assert.match(source, /function openAgentPrompt\(doc(, pick)?(, back)?\) \{[\s\S]{0,400}showPage\('agentPrompt', '', \{/, 'opening the prompt page clears the query behind it');
 assert.match(source, /function showPage\(mode, placeholder, page, value = ''\) \{\n(?:[^\n]*\n)*?  palInput\.placeholder = placeholder; palInput\.value = value;\n  coverWindow\([^\n]*\n\}/, 'a page starts with the field holding only what it was opened with');
 // The agent badge sits at the end of the row — after the body, which is the flexible part of the line — and its
 // sweep is opt-in: a reduced-motion setting leaves it still, like every other animation here.

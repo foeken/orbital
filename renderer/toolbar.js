@@ -483,7 +483,7 @@ function meetingWhen(item, choice, title, link) { // link: the selection "#" mak
   } });
 }
 // The AI's reading of a when page's words, as rows: a row to ask it, a note while it reads, then the time it read to press,
-// its question back, or why there is none. Shared by "/" Meeting's when page and Edit meeting details (renderer/meeting.js).
+// its question back, or why there is none. Shared by "/" Meeting's when page and Change time (renderer/meeting.js).
 // Only the reading of the words now in the field is shown: words typed since are asked again.
 function readRows(read, words, group, ask, timeRow) {
   if (read && read.busy) return [{ group, icon: 'sparkle', spin: true, label: 'Reading “' + read.words + '”…', disabled: true, note: true }]; // spin: the palette's thinking glyph, as Auto-pick type and Discuss with show while the AI reads

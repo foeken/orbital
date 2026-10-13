@@ -4,7 +4,7 @@
 const tana = window.api ? readOnlyInDemo(window.api) : readOnlyInDemo(mockApi());
 // Demo mode draws made-up words, and nothing on screen may then reach Tana: every call that writes is refused here,
 // whatever asked for it (a key, Cmd+K, a checkbox, a drop). Reads, navigation and the app's own settings still work.
-const DEMO_WRITES = new Set(['mcpUse', 'mcpUsePlugin', 'sendChat', 'askAgent', 'deleteAgentAsk', 'deleteChatMessage', 'newChat', 'answerChat', 'inviteToChat', 'editMeeting', 'setNotify', 'inboxSetRead', 'inboxMarkAll', 'proposalAnswer', 'linkAgentTask', 'discussWith', 'processImage',
+const DEMO_WRITES = new Set(['mcpUse', 'mcpUsePlugin', 'sendChat', 'askAgent', 'deleteAgentAsk', 'startAgentChat', 'sendAgentChat', 'renameAgentChat', 'deleteAgentChat', 'deleteChatMessage', 'newChat', 'answerChat', 'inviteToChat', 'editMeeting', 'setNotify', 'inboxSetRead', 'inboxMarkAll', 'proposalAnswer', 'discussWith', 'processImage',
   'deleteDocument', 'restoreDocument', 'archiveDocument', 'unarchiveDocument', 'setType', 'setField', 'defineField', 'addField', 'setTypeIcon',
   'setTypeHue', 'createDocument', 'createSearch', 'setSearchFilter', 'setTitle', 'setDone', 'setState', 'setStateMany', 'toggleCheckbox', 'cycleCheckboxes',
   'setSharing', 'moveToSpace', 'setAssignees', 'setAssigneesMany', 'setText', 'setCell', 'tableOp', 'setBlockType', 'insertDivider',
@@ -21,7 +21,7 @@ function readOnlyInDemo(api) {
       const found = (p) => p.then((v) => v || Promise.reject(new Error('Demo mode is on: nothing is saved to Tana')));
       if (key === 'todayNode') return (offset) => found(own.todayNode(offset, true));
       if (key === 'weekNode') return () => found(own.weekNode(true));
-      if (key === 'myTasks') return () => found(own.myTasks(true)); // the Work View's My Tasks, found and never made
+      if (key === 'myTasks') return () => found(own.myTasks(true)); // the Default View's My Tasks, found and never made
       if (key === 'meetingNotes') return (id) => own.meetingNotes(id, false); // a meeting's private notes, found and never made
       return own[key];
     },
@@ -36,9 +36,9 @@ let searches = [];           // [{ id, title, icon, … }] saved search document
 // Marked `added`, loadSearches keeps such an entry until the graph's answer has it; deleting it drops it like any other.
 function addSearch(n) { if (!n || typeof n.id !== 'string' || !n.id.startsWith(SEARCH_ID)) return; searches = [{ ...n, added: true }, ...searches.filter((s) => s.id !== n.id)]; }
 let searchesLoaded = false;  // whether that list has answered once: until it has, a Home search is trusted, not repaired away
-// Home: the window this app comes back to (Go to Home, ⇧⌘H) — the Work View, the window kept by Set as Home ('homeView'),
+// Home: the window this app comes back to (Go to Home, ⇧⌘H) — the Default View, the window kept by Set as Home ('homeView'),
 // or, chosen before Home was a window, the Library or a saved search, kept as its own id so renaming the search in Tana
-// keeps the choice; those open as a window of one pane. The Work View is the default, the Library the fallback for a
+// keeps the choice; those open as a window of one pane. The Default View is the default, the Library the fallback for a
 // search that is gone (nodes.js).
 let home = pref('home', 'workView');
 // Every page of a window (shell.js) keeps its own view and place under its id, which never changes while it lives:
@@ -132,10 +132,10 @@ const AGENT_BADGE = {
 };
 const agentStateOf = (id) => (AGENT_BADGE[agentStates.get(id)] ? agentStates.get(id) : 'pending');
 const agentTasks = new Map(); // docId -> { agent, taskId }: which agent's task each linked node is
-// Every agent the app knows (main/agent.js list): Tana always, Codex and Claude greyed until installed. Read at boot
+// Every agent the app knows (main/agent.js list): Tana always, Codex greyed until installed. Read at boot
 // and after Choose agents changes it; the rows each agent brings are drawn from it.
-let agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, isDefault: true, opensHere: true }];
-let agentPick = 'tana'; // the agent the Assign to Agent page will hand the node to, the default until the page picks another
+let agentList = [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, opensHere: true }];
+let agentPick = 'tana'; // the agent the Assign page will hand the node to: the one its row named
 const agentsOn = () => agentList.filter((a) => a.enabled && a.installed);
 const agentNamed = (id) => agentList.find((a) => a.id === id) || null;
 let visibilityPeople = new Set();

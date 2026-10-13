@@ -18,8 +18,13 @@ if (file === 'shell.html') {
     layout: (layout) => ipcRenderer.send('shell:layout', layout), // { doc, pages: [ids in doc] }: every committed change
     // the window's sidebar: your sidebar pins as Tana keeps them, [{ id, uri?, label?, node?, children }], read again on onPins
     pins: () => ipcRenderer.invoke('pins:tree'),
-    pinMenu: (uri) => ipcRenderer.invoke('pins:menu', uri), // a right-click on a pin: Remove pin
+    pinMenu: (uri) => ipcRenderer.invoke('pins:menu', uri), // a right-click on a pin: Open in … (answers where: 'tab' | 'right' | 'float' | null) and Remove pin
+    openMenu: () => ipcRenderer.invoke('pins:openMenu'), // a right-click on another sidebar row: Open in …, answered the same way
     onPins: (cb) => ipcRenderer.on('pins:changed', () => cb()),
+    // its Agent chats section: your chats with Codex, newest first (main/agentchats.js), read again on onAgentChats
+    agentChats: () => ipcRenderer.invoke('agentChat:list'),
+    onAgentChats: (cb) => ipcRenderer.on('agentChat:changed', () => cb()),
+    agentChatMenu: (id) => ipcRenderer.invoke('agentChat:menu', id), // a right-click on a chat: Open in …, answered the same way, and Delete chat
   });
   return;
 }
@@ -111,17 +116,14 @@ contextBridge.exposeInMainWorld('api', unwrapped({
   proposalAnswer: (chatUri, proposedUri, approve) => ipcRenderer.invoke('proposals:answer', chatUri, proposedUri, approve),
   timelinePages: (n) => ipcRenderer.invoke('timeline:pages', n), // how many pages of three days back children('orbital:timeline') reads; resolves to the number it took
   onTimelinePart: (cb) => ipcRenderer.on('timeline:part', (_e, rows) => cb(rows)), // the Timeline so far, while children('orbital:timeline') is still reading the rest
-  // The agents a node can be handed to (main/agent.js, main/agents/): Tana, Codex, Dot, Claude, and every agent linked
+  // The agents a node can be handed to (main/agent.js, main/agents/): Tana, Codex, and every agent linked
   // through orbital.md/mcp (main/agents/linked.js), which carries linked, app and seenAt
-  agentList: () => ipcRenderer.invoke('agent:list'), // [{ id, label, icon, installed, missing, enabled, isDefault, link, openNew, chat, opensHere, setup, linked?, app?, seenAt? }]
+  agentList: () => ipcRenderer.invoke('agent:list'), // [{ id, label, icon, installed, missing, enabled, chat, opensHere, setup, linked?, app?, seenAt? }]
   enableAgent: (id, on) => ipcRenderer.invoke('agent:enable', id, on), // the new list
-  setDefaultAgent: (id) => ipcRenderer.invoke('agent:default', id), // the new list
   agentIds: () => ipcRenderer.invoke('agent:ids'), // nodes handed to an agent; app-local, not a Tana assignee
-  setAgent: (docId, on, prompt, agent) => ipcRenderer.invoke('agent:set', docId, on, prompt, agent), // agent: its id, the default when absent
+  setAgent: (docId, on, prompt, agent, options) => ipcRenderer.invoke('agent:set', docId, on, prompt, agent, options), // agent: its id (required: there is no default); options: { newChat } for ChatGPT
   agentTasks: () => ipcRenderer.invoke('agent:tasks'), // nodeId -> { agent, taskId }, for every linked node
-  linkAgentTask: (docId, agent, link) => ipcRenderer.invoke('agent:link', docId, agent, link), // a task that already exists in that agent's app, pasted
   openAgentTask: (docId) => ipcRenderer.invoke('agent:open', docId), // open the task this node is linked to, in its agent's app
-  openInAgent: (agent, link) => ipcRenderer.invoke('agent:openNew', agent, link), // a fresh, untracked task carrying the node's link
   agentStatus: () => ipcRenderer.invoke('agent:status'), // docId -> pending|working|waiting|done|broken for every linked node
   // Connect your personal agent … (main/agents/linked.js, docs/MCP-SERVER.md): a one-time code and the prompt that carries it
   mcpLink: () => ipcRenderer.invoke('mcp:link'), // { code, expiresAt, url, tana, prompt }
@@ -211,6 +213,17 @@ contextBridge.exposeInMainWorld('api', unwrapped({
   agentReplies: (id) => ipcRenderer.invoke('chatAgent:replies', id), // the questions asked in this chat with their answers, local only: [{ id, question, agent, label, at, state: working|done|failed, text }]
   openAgentAsk: (id, askId) => ipcRenderer.invoke('chatAgent:open', id, askId), // open the task that answered this question in its agent's app: true, or false when it is not on this device
   deleteAgentAsk: (id, askId) => ipcRenderer.invoke('chatAgent:delete', id, askId), // forget a question and its answer on this device (they were never in Tana)
+  // Agent chats (main/agentchats.js, docs/CHATS.md §13): a chat that is a Codex thread, Orbital keeping only its link; a
+  // chat's messages, and the list's rows, come through children(id) like any page's
+  agentChats: () => ipcRenderer.invoke('agentChat:list'), // [{ id, title, meta, agentChat: { agent, at, elsewhere } }], newest first
+  startAgentChat: (agent, text) => ipcRenderer.invoke('agentChat:start', agent, text), // a new chat with that agent, its first message sent: its row on the list
+  sendAgentChat: (id, text) => ipcRenderer.invoke('agentChat:send', id, text), // { queued }: queued when the Codex app has the chat open, and answered there
+  stopAgentChat: (id) => ipcRenderer.invoke('agentChat:stop', id), // stop the answer being written
+  renameAgentChat: (id, name) => ipcRenderer.invoke('agentChat:rename', id, name), // here and in Codex: its row on the list
+  agentChatInfo: (id) => ipcRenderer.invoke('agentChat:info', id), // { model, effort } the chat runs with, named as Orbital names them
+  openAgentChat: (id) => ipcRenderer.invoke('agentChat:open', id), // in the Codex app
+  deleteAgentChat: (id) => ipcRenderer.invoke('agentChat:delete', id), // forget the link (the thread stays in Codex): the list as it is now
+  onAgentChatChanged: (cb) => ipcRenderer.on('agentChat:changed', (_e, id) => cb(id)), // a chat's answer moved on, or the list changed
   deleteChatMessage: (id, messageId) => ipcRenderer.invoke('chat:delete', id, messageId), // delete one of your own messages from the chat, for everyone, as Tana's Delete message does
   inviteToChat: (id, userUri) => ipcRenderer.invoke('chat:invite', id, userUri), // a workspace member joins the chat as an editor: { name } // a new chat with Tana, yours alone: Node to zoom
   taskTypes: () => ipcRenderer.invoke('doc:taskTypes'), // [{ uri, title, hue }]: the workflow types Quick Add Task offers (task.html)

@@ -61,7 +61,7 @@ if (!chrome) { console.error('No chrome-headless-shell: run npx playwright insta
 const DPR = 2;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TYPES = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.webp': 'image/webp', '.gz': 'application/gzip' };
-// main.js pair(): the Work View's two pages, as main hands them to the shell
+// main.js pair(): the Default View's two pages, as main hands them to the shell
 const pair = (graph) => ({ schema: 1, root: { kind: 'split', id: 'split-work', axis: 'x', weights: graph ? [0.72, 0.28] : [0.6, 0.4], children: ['', '2'].map((id) => ({ kind: 'panel', id: 'panel-work' + id, views: ['page' + id], selected: 'page' + id })) },
   floating: [], hidden: [], views: { page: { type: 'page', params: { side: '' } }, page2: { type: 'page', params: { side: '2', ...(graph ? { links: true } : {}) } } } });
 
@@ -227,7 +227,7 @@ function parseKey(combo) {
         const state = { doc: shot.layout || (panes > 1 ? pair(shot.graph) : null), theme };
         // every shot starts from a fresh window: nothing a page stored in an earlier shot (its place, a fold, a pref)
         await send('Storage.clearDataForOrigin', { origin: 'http://127.0.0.1:' + server.address().port, storageTypes: 'local_storage,session_storage,indexeddb' });
-        const { identifier } = await send('Page.addScriptToEvaluateOnNewDocument', { source: 'if (window === top) window.shell = { state: () => (' + JSON.stringify(state) + '), onCommand() {}, layout() {}, onPins() {}, pins: async () => (' + JSON.stringify(require('./kit').SIDEBAR_PINS) + ') };' });
+        const { identifier } = await send('Page.addScriptToEvaluateOnNewDocument', { source: 'if (window === top) window.shell = { state: () => (' + JSON.stringify(state) + '), onCommand() {}, layout() {}, onPins() {}, pins: async () => (' + JSON.stringify(require('./kit').SIDEBAR_PINS) + '), onAgentChats() {}, agentChats: async () => (' + JSON.stringify(require('./kit').SIDEBAR_CHATS) + ') };' });
         await send('Page.navigate', { url: 'http://127.0.0.1:' + server.address().port + '/shell.html' });
         await sleep(1500);
         await send('Page.removeScriptToEvaluateOnNewDocument', { identifier });

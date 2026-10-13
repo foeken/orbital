@@ -7,13 +7,9 @@ internal class G(val x: Float, val y: Float, val w: Float, val h: Float, val par
 
 internal val GLYPHS: Map<String, G> = mapOf(
     "timeline" to G(0f, 0f, 18f, 18f, listOf(
-        P("M5.75 3.25L5.75 1.25", false, 1f, "round", "round"),
-        P("M12.25 3.25L12.25 1.25", false, 1f, "round", "round"),
-        P("M4.25 3.25H13.75A2 2 0 0 1 15.75 5.25V13.75A2 2 0 0 1 13.75 15.75H4.25A2 2 0 0 1 2.25 13.75V5.25A2 2 0 0 1 4.25 3.25Z", false, 1f, "round", "round"),
-        P("M2.25 6.75L15.75 6.75", false, 1f, "round", "round"),
-        P("M4.75 9.75L8 9.75", false, 1f, "round", "round"),
-        P("M12.75 9.75L13.25 9.75", false, 1f, "round", "round"),
-        P("M7.75 12.75L12.25 12.75", false, 1f, "round", "round"),
+        P("M5.75 11.25L9 9L9 4.75", false, 1f, "round", "round"),
+        P("m16.0068,7.166c-.8134-3.1143-3.6375-5.416-7.0068-5.416C4.996,1.75,1.75,4.9958,1.75,9s3.246,7.25,7.25,7.25c.6894,0,1.3538-.1023,1.9855-.2822", false, 1f, "round", "round"),
+        P("M14.9167 13.25L12.25 13.25L14.5 9.75L13.5833 12.75L16.25 12.75L14 16.25L14.9167 13.25Z", true, 1f, "round", "round"),
     )),
     "library" to G(0f, 0f, 18f, 18f, listOf(
         P("M12.75 2.764L12.75 7.25", false, 1f, "round", "round"),
@@ -211,13 +207,9 @@ internal val GLYPHS: Map<String, G> = mapOf(
         P("M2.75 9.5L6.5 13.25L15.25 4.5", false, 2.5f, "round", "round"),
     )),
     "timelineMenu" to G(0f, 0f, 18f, 18f, listOf(
-        P("M5.75 3.25L5.75 1.25", false, 1.6f, "round", "round"),
-        P("M12.25 3.25L12.25 1.25", false, 1.6f, "round", "round"),
-        P("M4.25 3.25H13.75A2 2 0 0 1 15.75 5.25V13.75A2 2 0 0 1 13.75 15.75H4.25A2 2 0 0 1 2.25 13.75V5.25A2 2 0 0 1 4.25 3.25Z", false, 1.6f, "round", "round"),
-        P("M2.25 6.75L15.75 6.75", false, 1.6f, "round", "round"),
-        P("M4.75 9.75L8 9.75", false, 1.6f, "round", "round"),
-        P("M12.75 9.75L13.25 9.75", false, 1.6f, "round", "round"),
-        P("M7.75 12.75L12.25 12.75", false, 1.6f, "round", "round"),
+        P("M5.75 11.25L9 9L9 4.75", false, 1.6f, "round", "round"),
+        P("m16.0068,7.166c-.8134-3.1143-3.6375-5.416-7.0068-5.416C4.996,1.75,1.75,4.9958,1.75,9s3.246,7.25,7.25,7.25c.6894,0,1.3538-.1023,1.9855-.2822", false, 1.6f, "round", "round"),
+        P("M14.9167 13.25L12.25 13.25L14.5 9.75L13.5833 12.75L16.25 12.75L14 16.25L14.9167 13.25Z", true, 1.6f, "round", "round"),
     )),
     "searchMenu" to G(0f, 0f, 18f, 18f, listOf(
         P("M15.75 15.75L11.6386 11.6386", false, 1.6f, "round", "round"),

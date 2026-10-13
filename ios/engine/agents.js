@@ -1,14 +1,14 @@
 'use strict';
 // Your Dot from the phone: linked and handed nodes as the Mac does it (main/agents/linked.js, main/agents/index.js
 // assign), over the same MCP server client, event words and status line (main/mcp-server.js), and the same synced settings: your
-// Orbital's key (relayKey), which agents are on and the default (agents, defaultAgent), and each node's mark, request and
+// Orbital's key (relayKey), which agents are on (agents), and each node's mark, request and
 // task link (codex, codexPrompt, codexTask). So an agent linked on the phone is in the Mac's Choose agents, and a node
 // handed over from the phone shows the Mac's badge, and the other way round. Only agents linked through orbital.md are
-// offered here: Tana, Codex and Claude run on a Mac.
+// offered here: Tana and Codex run on a Mac.
 const { S } = require('../../main/state');
 const settings = require('../../main/settings');
 const mcpServer = require('../../main/mcp-server');
-const agent = require('../../main/agent'); // which agents are on, the default and the MCP server's list, kept as the Mac keeps them
+const agent = require('../../main/agent'); // which agents are on and the MCP server's list, kept as the Mac keeps them
 const { contentText, editable, readNode } = require('../../sdk/node');
 
 const { ID } = mcpServer;
@@ -27,10 +27,10 @@ function mark(id, link) {
   settings.set('codexTask', tasks);
 }
 
-// The agents linked to your Orbital, as this phone last heard from the MCP server, each with whether it is on and the default
+// The agents linked to your Orbital, as this phone last heard from the MCP server, each with whether it is on
 function linked() {
-  const on = enabled(), def = settings.get('defaultAgent');
-  return mcpServer.cached().map((a) => ({ id: ID + a.id, name: a.name, app: a.app || '', seenAt: a.seenAt || null, on: on.includes(ID + a.id), isDefault: def === ID + a.id }));
+  const on = enabled();
+  return mcpServer.cached().map((a) => ({ id: ID + a.id, name: a.name, app: a.app || '', seenAt: a.seenAt || null, on: on.includes(ID + a.id) }));
 }
 // node -> the linked agent it is handed to, for the long press and a node's Agent field
 function handed() {
@@ -46,7 +46,7 @@ async function refresh() {
   await settings.flush();
 }
 // The MCP server asked at most once a minute as the app reads its setup; what it answers shows at the next read. Never before
-// this account's settings document was read: with no relaySeen yet, every agent would look new and be made the default
+// this account's settings document was read: with no relaySeen yet, every agent would look new and be switched on again
 // again over the one you chose.
 let refreshedAt = 0;
 function refreshSoon() {
@@ -88,7 +88,7 @@ function agents({ hold, settled }) {
       await settings.flush();
       return JSON.stringify(out);
     },
-    // asked every two seconds while the page is up: waiting, expired, or linked with the agent, switched on and the default
+    // asked every two seconds while the page is up: waiting, expired, or linked with the agent, switched on
     async linkStatus(code) {
       const s = await mcpServer.codeStatus(code);
       if (s.state !== 'linked') return JSON.stringify({ state: s.state, expiresAt: s.expiresAt });
@@ -122,17 +122,8 @@ function agents({ hold, settled }) {
       await settings.flush();
       return JSON.stringify(true);
     },
-    // Settings' swipe, Make Default: the agent Assign to puts first, switched on with it (main/agent.js setDefault asks for
-    // an agent that is on; a swipe on one that is off means both)
-    async setDefault(agentId) {
-      await settled();
-      if (!mcpServer.cached().some((a) => ID + a.id === agentId)) throw new Error('No such linked agent');
-      agent.choose(agentId);
-      await settings.flush();
-      return JSON.stringify(linked());
-    },
-    // Settings' swipe, Unlink, as linked.js unlink: the MCP server lets the agent go, it is switched off (and no longer the
-    // default), and its nodes are unassigned, status line and all: an agent that is gone keeps no badge
+    // Settings' swipe, Unlink, as linked.js unlink: the MCP server lets the agent go, it is switched off, and its nodes
+    // are unassigned, status line and all: an agent that is gone keeps no badge
     async unlink(agentId) {
       await settled();
       const a = mcpServer.cached().find((x) => ID + x.id === agentId);

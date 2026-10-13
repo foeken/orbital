@@ -61,14 +61,14 @@ let authRpc = null, authHome = null, authReady = null, activeLogin = null, login
 
 // With no Codex on this Mac, sign-in runs on the standalone app-server from Codex's own GitHub release, fetched into
 // userData on the first "Sign in with ChatGPT" and kept only when it carries OpenAI's Developer ID. It answers for
-// the AI rows alone: handing work to a Codex task still needs a real Codex (main/agents/codex.js codexBin).
+// the AI rows alone: handing work to a Codex task still needs a real Codex (main/codex-app-server.js codexBin).
 // ponytail: fetched once and never updated; replace the file when the sign-in protocol moves past it.
 const SERVER = 'codex-app-server', OPENAI_TEAM = '2DC432GLL2';
 // what that download may be before its signature is checked (security review finding 4): packed, unpacked, and how long
 // fetching and unpacking may take; a real one is a fraction of either
 const SERVER_BOUNDS = { packed: 300 * 1024 ** 2, unpacked: 1024 ** 3, download: 5 * 60e3, unpack: 2 * 60e3 };
 const ownServer = (userData) => path.join(userData, SERVER);
-const serverBin = (userData) => require('./agents/codex').codexBin() || (fs.existsSync(ownServer(userData)) ? ownServer(userData) : null);
+const serverBin = (userData) => require('./codex-app-server').codexBin() || (fs.existsSync(ownServer(userData)) ? ownServer(userData) : null);
 let installing = null;
 async function downloadServer(userData) {
   const run = promisify(require('node:child_process').execFile);
@@ -110,7 +110,7 @@ async function ensureChatGPT(userData, install = false) {
   }
   if (!authRpc) { // a second caller may have started it while the download ran
     fs.mkdirSync(home, { recursive: true, mode: 0o700 });
-    const rpc = require('./agents/codex').appServerRpc(TIMEOUT_MS, chatgptNote, { codexHome: home, bin: serverBin(userData) });
+    const rpc = require('./codex-app-server').appServerRpc(TIMEOUT_MS, chatgptNote, { codexHome: home, bin: serverBin(userData) });
     authRpc = rpc; authHome = home;
     authReady = rpc.ready.catch((error) => {
       if (authRpc === rpc) { authRpc = null; authHome = null; authReady = null; }
@@ -135,7 +135,7 @@ function authView(response) {
 // Every status carries whether an OpenAI API key is stored: the pages replace theirs with each one they hear, and a
 // status without it made Set OpenAI API key disappear after any sign-in event (#671 review)
 // It also says whether a real Codex is on this Mac (the ChatGPT app, or the CLI): the Help tour asks for the app first.
-const withKey = (status) => ({ ...status, apiKey: !!settings.get('openaiApiKey'), region: region(), installed: !!require('./agents/codex').codexBin() });
+const withKey = (status) => ({ ...status, apiKey: !!settings.get('openaiApiKey'), region: region(), installed: !!require('./codex-app-server').codexBin() });
 
 // A device sign-in ends when Codex says so (account/login/completed) or when a read finds the account signed in,
 // whichever comes first: Codex's own log has that notification reaching no connection at all (2026-09-23,
@@ -177,7 +177,7 @@ async function startChatGPTLogin(userData) {
   const status = await readChatGPT(rpc);
   if (status.signedIn) return status;
   const result = await rpc.call('account/login/start', { type: 'chatgptDeviceCode' });
-  if (result.type !== 'chatgptDeviceCode' || !result.loginId || !result.verificationUrl || !result.userCode) throw new Error('This Codex CLI does not support ChatGPT device sign-in; update Codex CLI and try again');
+  if (result.type !== 'chatgptDeviceCode' || !result.loginId || !result.verificationUrl || !result.userCode) throw new Error('This ChatGPT app does not support device sign-in yet: update the ChatGPT app and try again');
   activeLogin = { loginId: result.loginId, verificationUrl: result.verificationUrl, userCode: result.userCode };
   loginError = null;
   send('ai:chatgptChanged', authView({ account: null }));
@@ -236,7 +236,7 @@ async function askChatGPT(instructions, input, userData, use, image, timeout = T
       approvalPolicy: 'never', sandbox: 'read-only', baseInstructions: instructions + NO_TOOLS,
     });
     threadId = started.thread?.id;
-    if (!threadId) throw new Error('Codex did not start a ChatGPT request');
+    if (!threadId) throw new Error('ChatGPT did not start the request');
     const completed = new Promise((resolve, reject) => {
       const pending = { threadId, turnId: null, resolve, reject, timer: setTimeout(() => {
         if (activeTurn === pending) {
@@ -347,7 +347,7 @@ async function classifyType({ title, text, current = null, types = [] }, fetchIm
     .map((c, i) => ({ ...c, p: raw[i] / sum })); // scaled to 1, so percentages or a stray key still read right
   return { current, choices: choices.sort((a, b) => b.p - a.p) };
 }
-// ---- A meeting's time from words: Edit meeting details and "/" Meeting's when page (main/meetings.js readTime) ----
+// ---- A meeting's time from words: Change time and "/" Meeting's when page (main/meetings.js readTime) ----
 // The model only writes down what the words say: a day, clock times as written and whether the words fix their hour,
 // a length, or a question when the words leave the day or time open. Morning or afternoon, today, the length, and
 // whether the result is a time at all are main/meetings.js resolveTime's, decided the same way every time. The answer

@@ -6,7 +6,7 @@ import SwiftUI
 // request written here and the node's own words left in Tana. What is linked and handed over is in your settings
 // document, so the Mac sees it too.
 
-// Settings' Agents: each agent linked through orbital.md, by the name it gave itself, swiped right to make it the default
+// Settings' Agents: each agent linked through orbital.md, by the name it gave itself, swiped left to unlink it
 // and left to unlink it, then Connect your personal agent
 struct AgentsSection: View {
     let engine: Engine
@@ -15,15 +15,12 @@ struct AgentsSection: View {
     var body: some View {
         Section {
             ForEach(engine.agents) { a in
-                LabeledContent { Text([a.isDefault ? "Default" : nil, a.on ? nil : "Off"].compactMap { $0 }.joined(separator: " · ")) } label: {
+                LabeledContent { Text(a.on ? "" : "Off") } label: {
                     SettingsView.Row(glyph: "robot", title: a.name)
                 }
                 // their own colours: the Form's tint (the rows' text colour) would draw them white on white
                 .swipeActions(edge: .trailing) {
                     Button("Unlink", role: .destructive) { Task { await engine.unlink(a) } }.tint(.red)
-                }
-                .swipeActions(edge: .leading) {
-                    if !a.isDefault { Button("Make Default") { Task { await engine.makeDefault(a) } }.tint(.blue) }
                 }
             }
             NavigationLink { ConnectAgent(engine: engine) } label: { SettingsView.Row(glyph: "mcp", title: "Connect your personal agent") }
@@ -101,7 +98,7 @@ struct ConnectAgent: View {
                     }
                 }
             } header: { SettingsView.Header("Then ask your agent to link") } footer: {
-                Text("Send the instructions to your agent. The code works once, for fifteen minutes.\n\nOnly the node's id and your request go through \((link?.url ?? "https://orbital.md/mcp").replacingOccurrences(of: "https://", with: "")), and it keeps neither: the node's words stay in Tana, where your agent reads them with its own Tana access.")
+                Text("Send the instructions to your agent. The code works once, for fifteen minutes.\n\n\(relayWords(link?.url))")
             }
         }
         .tint(.primary)
@@ -128,9 +125,16 @@ struct ConnectAgent: View {
     }
     private func poll() async {
         guard let code = link?.code else { return }
+        var misses = 0 // a missed answer: the next one asks again, but one that keeps failing is said, not waited on for ever (renderer/agent.js pollConnect)
         while state == "waiting", !Task.isCancelled {
             try? await Task.sleep(for: .seconds(2))
-            guard !Task.isCancelled, let s = try? await engine.linkStatus(code) else { continue } // a missed answer: the next one asks again
+            guard !Task.isCancelled else { return }
+            let s: Engine.LinkState
+            do { s = try await engine.linkStatus(code); misses = 0 } catch {
+                misses += 1
+                if misses >= 3 { failure = error.localizedDescription; state = "failed" }
+                continue
+            }
             if s.state == "linked", let a = s.agent {
                 linked = a.name
                 state = "linked"
@@ -148,6 +152,14 @@ struct ConnectAgent: View {
 
 // The ? beside Add both plugins: your OpenAI Dot step by step, with ChatGPT's plugins a tap away, then the same for any
 // other agent that can add MCP servers and hear MCP events
+// What goes through the Orbital MCP server, as the Mac says it (renderer/agent.js relayWords; Android's Agents.kt the same): on
+// orbital.md that is Orbital's relay, run by us; any other address is the workspace's own
+func relayWords(_ url: String?) -> String {
+    let host = (url ?? "https://orbital.md/mcp").replacingOccurrences(of: "https://", with: "").components(separatedBy: "/").first ?? "orbital.md", ours = host == "orbital.md"
+    return "Everything you send your agent goes through \(host)" + (ours ? ", Orbital's relay, run by us" : ", your workspace's own Orbital MCP server")
+        + ": a node's id and your request with each task. A node's words stay in Tana, where your agent reads them with its own access."
+        + (ours ? " Host your own Orbital MCP server to keep all of it in your workspace." : "")
+}
 struct ConnectHelp: View {
     let link: Engine.LinkCode?
     static let plugins = URL(string: "https://chatgpt.com/plugins")!

@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
             window.decorView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
         }
         // the launch extras (design shots, the device tests, adb) only on a debug build: another app gets a release as it is
-        val start = if (savedInstanceState == null && tooling(this)) Start(intent.getStringExtra("zoom"), intent.getBooleanExtra("settings", false), intent.getBooleanExtra("add", false), intent.getBooleanExtra("menudemo", false), intent.getBooleanExtra("menu", false)) else Start()
+        val start = if (savedInstanceState == null && tooling(this)) Start(intent.getStringExtra("zoom"), intent.getBooleanExtra("settings", false), intent.getBooleanExtra("add", false), intent.getBooleanExtra("menudemo", false), intent.getBooleanExtra("menu", false), intent.getBooleanExtra("connect", false)) else Start()
         link(if (savedInstanceState == null) intent else null)
         setContent { OrbitalApp(engine, start) }
     }

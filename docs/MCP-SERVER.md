@@ -1,6 +1,6 @@
 # MCP-SERVER.md — orbital.md/mcp, the event layer between Orbital and your Dot
 
-Orbital hands work to agents (main/agent.js): Tana, Codex and Claude are built in. The Orbital MCP server is how your Dot,
+Orbital hands work to agents (main/agent.js): Tana and ChatGPT (Codex's app-server) are built in, Claude to come (#823). The Orbital MCP server is how your Dot,
 OpenAI's always-on agent in ChatGPT, becomes one more. It is the MCP server at **orbital.md/mcp** (mcp-server/server.js),
 plain JSON over HTTPS, and it is **only an event layer**: Orbital sends an event, the MCP server passes it on to the agents
 subscribed to it and keeps none of it, and the rest happens in Tana. The MCP server says nothing of its own about what an
@@ -26,9 +26,8 @@ agent should do: what to do comes with each event, written by Orbital.
    `HOW`), so changing it is a release of Orbital, never a message everybody has to paste into their Dot again. The code
    works once and for fifteen minutes.
 4. The page, asking every two seconds, sees the code used, closes on "Linked Dot · ChatGPT", and the agent is one of
-   yours: `relay:<id>` in main/agent.js, by the name it gave itself (Echo, say), on from the start and the default agent
-   (linking your Dot is choosing it), in Choose agents, Assign to Agent, Assign to <its name> … and Settings.
-5. **Assign to Agent** (or Assign to Echo …) asks what it should do. For your Dot nothing of that request is written
+   yours: `relay:<id>` in main/agent.js, by the name it gave itself (Echo, say), on from the start, in Choose agents, Assign to <its name> … and Settings.
+5. **Assign to Echo …** asks what it should do. For your Dot nothing of that request is written
    into the node: Orbital writes the node's one last line, "Agent status: Assigned" (taking out any request block or
    status line an earlier handoff left), then sends `task.assigned` with `{ node, request, instructions }`
    (main/agents/linked.js send). A node that cannot be written is handed to nobody. An agent with no subscription would
@@ -48,17 +47,17 @@ with a new code moves it.
 The iPhone and Android apps link and hand over exactly as the Mac does, through the same code run in the phones' engine
 (ios/engine/agents.js): main/mcp-server.js (the MCP server client, the link message, the event's words, the status line, and the
 handover itself, `handOver`: Assigned written, the event sent, the node put back as the earlier handoff left it when the
-agent does not take it) and main/agent.js (which agents are on, the default, and the MCP server's list kept: `storeLinked`), with
-the same synced settings: `relayKey`, `agents` and `defaultAgent`, and each node's `codex`, `codexPrompt` and `codexTask`.
+agent does not take it) and main/agent.js (which agents are on, and the MCP server's list kept: `storeLinked`), with
+the same synced settings: `relayKey` and `agents`, and each node's `codex`, `codexPrompt` and `codexTask`.
 So a Dot linked on the phone is in the Mac's Choose agents, and a node handed over from the phone has the Mac's badge.
 **Settings → Agents → Connect your personal agent** is the Connect page (the two plugins with the ? for the steps, the
-instructions with their code, the wait), and an agent there swipes right to Make Default and left to Unlink (linked.js unlink: its nodes unassigned too).
+instructions with their code, the wait), and an agent there swipes left to Unlink (linked.js unlink: its nodes unassigned too).
 A long press's **Assign to …** lists each linked agent that is on above the people (on a note, alone): a tap asks for
 the request in the same sheet, typed or dictated; Assign closes it at once and the handoff goes on behind it, the +
 turning meanwhile, a request the agent did not take said and kept for the next time (Engine handOff), and a tap on the ticked agent, or Unassigned, takes the node back. A node's page shows
 the agent and its last status line. The MCP server sends `access-control-allow-origin: *`, which is what lets the engine
-call it from its page on home.tana.inc. Renaming, switching off and Reset agent link key stay on the Mac; Tana, Codex and
-Claude run on a Mac only.
+call it from its page on home.tana.inc. Renaming, switching off and Reset agent link key stay on the Mac; Tana and ChatGPT
+run on a Mac only.
 
 ## Why the request travels in the event
 

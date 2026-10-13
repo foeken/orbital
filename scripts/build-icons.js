@@ -27,7 +27,7 @@ WANT.cleanup = path.join(__dirname, '..', 'build', 'icons', 'brush-2.svg'); // t
 WANT.notify = path.join(__dirname, '..', 'build', 'icons', 'bell-on.svg'); // "Notify on changes": watching a node for edits
 WANT.reload = path.join(__dirname, '..', 'build', 'icons', 'refresh-anticlockwise.svg'); // Cmd+K "Reload": reloads the window, unlike sync's cloud-refresh
 WANT.robot = path.join(__dirname, '..', 'build', 'icons', 'face-robot-2.svg'); // the badge on a node assigned to the local Codex agent
-WANT.brain = path.join(__dirname, '..', 'build', 'icons', 'brain.svg'); // the model rows on the Assign to Agent page
+WANT.brain = path.join(__dirname, '..', 'build', 'icons', 'brain.svg'); // the model rows on the Assign page
 WANT.host = path.join(__dirname, '..', 'build', 'icons', 'monitor.svg'); // the machine a Codex task runs on
 WANT.home = path.join(__dirname, '..', 'build', 'icons', 'house.svg'); // the Home anchor crumb: the Library, or the saved search chosen as Home
 // a task put off: the Later state's own glyph (zzz, asleep), drawn instead of the task list-checkbox on those rows
@@ -62,8 +62,8 @@ WANT.userAlert = path.join(__dirname, '..', 'build', 'icons', 'user-alert.svg');
 WANT.proposals = path.join(__dirname, '..', 'build', 'icons', 'file-sparkle.svg');
 WANT.approve = path.join(__dirname, '..', 'build', 'icons', 'circle-check.svg');
 WANT.reject = path.join(__dirname, '..', 'build', 'icons', 'circle-xmark.svg');
-// The Timeline page (renderer/timeline.js), Nucleo UI 18px outline
-WANT.timeline = path.join(__dirname, '..', 'build', 'icons', 'calendar-planning.svg');
+// The Timeline page (renderer/timeline.js): Nucleo UI quick-timer, 18px outline
+WANT.timeline = path.join(__dirname, '..', 'build', 'icons', 'quick-timer.svg');
 // The Timeline's grey markers on its rail: Nucleo UI 18px outline circles, coloured by styles.css .tl-*. Outlines, not
 // solid glyphs: the one filled marker is finished work's green circle (and the edit's pen is a line glyph of its own)
 WANT.tlAccepted = path.join(__dirname, '..', 'build', 'icons', 'circle-plus-outline.svg');

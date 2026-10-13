@@ -13,7 +13,7 @@ const chatDrafts = new Map(); // docId -> what was typed there and not sent
 // docId -> { asked, id }: a message that went out for Tana to answer, when, and its id once main has written it. Each
 // send has its own, so the dots follow the newest one and only its own answer, one after that message, ends them.
 const chatWaiting = new Map();
-const isChatPage = (parent) => !!parent && !parent.nodeId && String(parent.docId).startsWith('tana:chat:');
+const isChatPage = (parent) => !!parent && !parent.nodeId && (String(parent.docId).startsWith('tana:chat:') || isAgentChat(parent.docId)); // a Tana chat, or an agent chat (renderer/agentchats.js)
 // @Codex and any other agent on this device (main/chatagents.js, docs/CHATS.md §12): the agents "@" offers, and the
 // questions asked in a chat with their answers, which live on this device only and never reach Tana. chatId -> [{ id,
 // question, agent, label, at, state: working|done|failed, text }], read when the chat opens and while one runs.
@@ -192,6 +192,7 @@ if (typeof ResizeObserver === 'function' && outline.parentElement) {
 // Who can see a chat and, for a meeting's chat, which meeting it is about: one quiet line at the top right (#543). The
 // meeting's attendees stay on the meeting's page: drawn here, as they were, they read as the chat's audience.
 function chatContextEl(parent) {
+  if (tana.agentChats && isAgentChat(parent.docId)) return agentChatContextEl(parent.docId); // a chat with Codex: private, and its model (renderer/agentchats.js)
   const node = parent.node;
   if (sensitiveHidden(node.id)) return null; // a sensitive chat says nothing about who
   const summary = documentSummary(node), meeting = tana.meetingInfo ? meetingOf(node) : null, el = document.createElement('div');
@@ -291,7 +292,7 @@ function toComposer() { selectMsg(null); if (!composer.hidden) composerText.focu
 // Yours to delete: a local question or answer (both go), or your own message in the chat when you may write in it
 function deletableMsg(docId, key) {
   const el = msgEl(key);
-  if (!el || chatShown !== docId) return false;
+  if (!el || chatShown !== docId || isAgentChat(docId)) return false; // an agent chat's messages are Codex's
   if (askOf(docId, key)) return !!tana.deleteAgentAsk;
   return el.classList.contains('mine') && !chatReadOnly.has(docId) && !!tana.deleteChatMessage;
 }
@@ -312,7 +313,7 @@ function chatMessageRows(docId) {
   const rows = [], sel = msgEl(chatSel) ? chatSel : null, picked = askOf(docId, sel), group = sel ? 'Message' : 'Actions';
   const answer = sel ? picked && picked.state === 'done' && picked : latestAgentAnswer(docId), ask = sel ? picked : latestAgentAsk(docId);
   if (tana.askAgent && answer) rows.push({ id: 'agentAnswerToMessage', group, icon: 'toMessage', label: 'Add ' + answer.label + '’s answer to message', hint: 'To send as your own words', run: () => answerToComposer(docId, answer.text) });
-  if (tana.openAgentAsk && ask) rows.push({ id: 'openAgentAsk', group, icon: 'robot', label: 'Open ' + ask.label + ' task', hint: picked ? 'The one behind this question' : 'The one behind the last @' + ask.label + ' answer', run: () => openAgentAsk(docId, ask.id) });
+  if (tana.openAgentAsk && ask) rows.push({ id: 'openAgentAsk', group, icon: 'robot', label: 'Open in ' + ask.label, hint: picked ? 'The one behind this question' : 'The one behind the last @' + ask.label + ' answer', run: () => openAgentAsk(docId, ask.id) });
   if (sel && deletableMsg(docId, sel)) rows.push({ id: 'deleteMessage', group, icon: 'trash', label: 'Delete message', hint: picked ? 'The question and its answer, from this device' : 'From the chat, for everyone in it', kbd: '⇧⌘⌫', run: () => deleteChatMsg(docId, sel) });
   return rows;
 }
@@ -371,10 +372,10 @@ function composerChanged() {
   composer.classList.toggle('empty', empty && !chatSkill);
 }
 function showMode() {
-  const docId = composer.dataset.doc, ai = chatAi.get(docId), readOnly = chatReadOnly.has(docId);
+  const docId = composer.dataset.doc, ai = chatAi.get(docId), away = isAgentChat(docId) && agentChatAway(docId), readOnly = chatReadOnly.has(docId) || away;
   composer.classList.toggle('readonly', readOnly);
   composerText.contentEditable = readOnly ? 'false' : 'plaintext-only';
-  composerText.dataset.placeholder = readOnly ? 'You can read this chat but not write in it' : ai === false ? 'Message the chat · @ links · Tab: to Tana' : 'Ask Tana · @ links · / runs a skill' + (ai ? ' · Tab: to the chat' : '');
+  composerText.dataset.placeholder = away ? 'This chat is on another Mac: continue it there' : isAgentChat(docId) ? 'Message ChatGPT · @ links · Not shared with Tana' : readOnly ? 'You can read this chat but not write in it' : ai === false ? 'Message the chat · @ links · Tab: to Tana' : 'Ask Tana · @ links · / runs a skill' + (ai ? ' · Tab: to the chat' : '');
 }
 // A skill is for Tana to run, so while one is attached the message goes To Tana and the mode stays put
 function switchMode(docId, ai = !chatAi.get(docId)) { if (chatSkill && !ai) return; chatAi.set(docId, ai); showMode(); }
@@ -469,6 +470,7 @@ function chatSend() {
   const text = chatMarkdown(draft.segs) || (skill ? 'Run [' + skill.label.replace(/[[\]\n]/g, ' ') + '](' + skill.uri + ')' : '');
   if (!docId || !text || !tana.sendChat) return;
   setComposer(null); chatDrafts.delete(docId);
+  if (isAgentChat(docId)) return agentChatSend(docId, draft, text); // renderer/agentchats.js: to Codex, never Tana
   // @Codex and the like: the question goes to that agent on this device, and stays here with its answer; not to Tana
   const agent = !skill && tana.askAgent && askedAgent(text);
   if (agent) {
@@ -507,7 +509,7 @@ composerText.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.isComposing) { e.preventDefault(); chatSend(); return; }
   if (e.key === 'Tab' && !e.shiftKey && !mod && chatAi.has(composer.dataset.doc) && !plainOf(composerSegs()).trim() && !composerText.querySelector('.mention')) { e.preventDefault(); switchMode(composer.dataset.doc); return; }
   if (e.key === '@' && !mod) { e.preventDefault(); composerLink(); return; }
-  if (e.key === '/' && !mod && !chatSkill && !beforeCaret().trim() && tana.searchPreview) { e.preventDefault(); openSkillPicker(); return; }
+  if (e.key === '/' && !mod && !chatSkill && !beforeCaret().trim() && tana.searchPreview && !isAgentChat(composer.dataset.doc)) { e.preventDefault(); openSkillPicker(); return; }
   if (e.key === 'Backspace' && chatSkill && !beforeCaret()) { e.preventDefault(); chatSkill = null; showSkill(); return; }
   // the field's own keys stay its own: ⌘Z undoes typing here rather than the last change to a node; ⌘K and the rest go on
   if (!mod || ['z', 'a', 'c', 'x', 'v', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Backspace'].includes(e.key.length === 1 ? e.key.toLowerCase() : e.key)) e.stopPropagation();
@@ -525,7 +527,20 @@ composerText.addEventListener('paste', (e) => {
 });
 composerText.addEventListener('focus', () => selectMsg(null));
 // A row dragged here, from this pane or another, goes in where it is dropped (composerDropSegs); never inside a chip
-const composerTakes = (e) => e.dataTransfer.types.includes(NODES_DRAG_TYPE) && !chatReadOnly.has(composer.dataset.doc);
+// (not into a box that takes nothing: a chat you may only read, or an agent chat another Mac started)
+const composerTakes = (e) => e.dataTransfer.types.includes(NODES_DRAG_TYPE) && !composer.classList.contains('readonly');
+// Anywhere on the chat, not only its message box: rows dropped on the conversation go into the message, as ⌘K Add to chat
+// puts them there (composeAdd), and the box is lit while they are over it. Taken before renderer/drag.js sees the drop.
+const chatScroll = outline.parentElement, chatDropOn = (e) => !composer.hidden && chatScroll.classList.contains('chatting') && composerTakes(e);
+chatScroll.addEventListener('dragover', (e) => { if (!chatDropOn(e)) return; e.preventDefault(); composer.classList.add('dropping'); });
+chatScroll.addEventListener('dragleave', (e) => { if (!chatScroll.contains(e.relatedTarget)) composer.classList.remove('dropping'); });
+chatScroll.addEventListener('drop', (e) => {
+  composer.classList.remove('dropping');
+  if (!chatDropOn(e)) return;
+  e.preventDefault();
+  composeAdd(composerDropSegs(JSON.parse(e.dataTransfer.getData(NODES_DRAG_TYPE))));
+  composerText.focus();
+});
 composerText.addEventListener('dragover', (e) => { if (composerTakes(e)) e.preventDefault(); });
 composerText.addEventListener('drop', (e) => {
   if (!composerTakes(e)) return;
@@ -549,13 +564,13 @@ function chatAfterRender(parent, stick) {
   }
   // Asked once there is a connection: a chat reopened at launch is drawn before there is one, and the render after it
   // comes up asks; a failed ask is asked again on the next render.
-  if (docId && connected && !chatAi.has(docId) && !chatAsking.has(docId) && tana.chatAnswers) {
+  if (docId && connected && !isAgentChat(docId) && !chatAi.has(docId) && !chatAsking.has(docId) && tana.chatAnswers) {
     chatAsking.add(docId);
     tana.chatAnswers(docId).then((r) => { if (!chatAi.has(docId)) chatAi.set(docId, !!r.ai); if (r.canWrite === false) chatReadOnly.add(docId); else chatReadOnly.delete(docId); if (composer.dataset.doc === docId) { showMode(); renderSoon(true); } }, () => {}) // renderSoon: waiting questions show once write access is known
       .finally(() => chatAsking.delete(docId));
   }
   const asking = chat && showQuestions(docId, chatPendingQ); // Tana's questions take the composer's place
-  if (opened) agentLoad(docId);
+  if (opened && !isAgentChat(docId)) agentLoad(docId); // @Codex asks: a Tana chat's
   if (!chat) showQuestions(null, null);
   composer.hidden = !chat || !!asking;
   if (chatCompose && chatCompose.docId === docId && !composer.hidden) { const { segs } = chatCompose; chatCompose = null; composeAdd(segs); } // ⌘K Add to chat, to a chat that was opening
@@ -689,7 +704,7 @@ qcard.addEventListener('keydown', (e) => {
 });
 
 // ---- inviting ----
-// ⌘K Invite to chat…: a workspace member joins this chat as an editor (main/documents.js inviteToChat), and the chat
+// ⌘K Invite to chat …: a workspace member joins this chat as an editor (main/documents.js inviteToChat), and the chat
 // says so. Once there are two of you Tana answers only when mentioned, so the composer moves to To the chat.
 function openInvitePicker(docId) {
   loadMembers();
@@ -732,17 +747,22 @@ function startNewChat() {
 }
 
 // ---- Add to chat ----
-// ⌘K Add to chat … on a row, the zoomed node or a selection (renderer/tasks.js selectionRows): New chat and the recent
-// chats, and the one picked gets references to them at the start of its message, the chips a drag onto it makes
+// ⌘K Add to chat … on a row, the zoomed node or a selection (renderer/tasks.js selectionRows): your agent chats first
+// (renderer/agentchats.js, those on this Mac), then New chat and the recent Tana chats, and the one picked gets
+// references to them at the start of its message, the chips a drag onto it makes
 // (composerDropSegs). A chat another pane of the window shows is brought into view there and gets them (shell.js
 // addToChat); any other chat opens in this pane.
 let addChatList = null; // loadList's answer: the chats, last changed first
 let chatCompose = null; // { docId, segs } for a chat still opening: its message gets them once its composer is up
 function openAddToChat(segs) {
   loadList('addToChat', () => tana.searchPreview({ types: ['chats'] }), (list) => { addChatList = list; });
+  const here = zoom && !zoom.nodeId && isChatPage(zoom) ? zoom.docId : null; // the chat on screen: no chat is added to itself
   openPage('addToChat', 'Add to which chat?', { back: BACK_TO_COMMANDS, rows: (q) => [
-    ...(fuzzyMatch('New chat', q) ? [{ group: 'Chats', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => run(async () => { const n = await tana.newChat(); composeInto(n.id, segs, n); }) }] : []),
-    ...listRows('Chats', addChatList, q, '', (list) => list.map((n) => [n, n.text || n.title || 'New chat']).filter(([, label]) => fuzzyMatch(label, q))
+    ...agentChatsKnown.filter((n) => !(n.agentChat && n.agentChat.elsewhere) && n.id !== here && fuzzyMatch(n.title || 'New chat', q))
+      .map((n) => ({ group: 'Agent chats', icon: n.icon || 'chatgpt', label: demoText(n.title || 'New chat', n.id), run: () => addToChat(n, segs) })),
+    ...(tana.startAgentChat && codexHere() && fuzzyMatch('New chat with ChatGPT', q) ? [{ group: 'Agent chats', icon: 'chatgpt', label: 'New chat with ChatGPT', hint: 'On this Mac, not in Tana', run: () => composeInto(AGENT_CHAT_NEW, segs, extra.get(AGENT_CHAT_NEW)) }] : []),
+    ...(fuzzyMatch('New chat with Tana', q) ? [{ group: 'Chats', icon: 'chat', label: 'New chat with Tana', hint: 'In Tana, answered by its AI', run: () => run(async () => { const n = await tana.newChat(); composeInto(n.id, segs, n); }) }] : []),
+    ...listRows('Chats', addChatList, q, '', (list) => list.filter((n) => n.id !== here).map((n) => [n, n.text || n.title || 'New chat']).filter(([, label]) => fuzzyMatch(label, q))
       .map(([n, label]) => ({ group: 'Chats', icon: 'chat', label: demoText(label, n.id), run: () => addToChat(n, segs) }))),
   ] });
 }
@@ -759,7 +779,7 @@ function composeInto(docId, segs, doc) {
 }
 // At the start of the message, the caret back where it was in it; with no caret in it (or at its very start), after them
 function composeAdd(segs) {
-  if (chatReadOnly.has(composer.dataset.doc)) return showNote('You can read this chat but not write in it', true);
+  if (composer.classList.contains('readonly')) return showNote(isAgentChat(composer.dataset.doc) ? 'This chat is on another Mac: continue it there' : 'You can read this chat but not write in it', true);
   const empty = !composerText.textContent.trim() && !composerText.querySelector('.mention');
   const sel = getSelection(), keep = !empty && beforeCaret() ? sel.getRangeAt(0).cloneRange() : null; // a live range: it moves along as they go in before it
   const last = segs.at(-1);

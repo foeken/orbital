@@ -182,12 +182,11 @@ class ScreensTest {
     }
 
     // Settings' Agents has Connect your personal agent (Agents.kt): the ? beside Add both plugins opens the help with
-    // ChatGPT's plugins, and the sample, which saves nothing, asks the MCP server for no code and says so, with Try again
+    // ChatGPT's plugins, and the sample shows an invented code that links nothing (Engine.kt linkCode), waiting for an agent
     @Test fun connectToYourDotFromSettings() = sample(start = com.dreetje.orbital.ui.Start(settings = true)) {
         waitUntil(timeoutMillis = 3000) { onAllWithText("Connect your personal agent").isNotEmpty() }
         onNodeWithText("Connect your personal agent").performClick()
-        waitUntil(timeoutMillis = 3000) { onAllWithText("The sample saves nothing").isNotEmpty() }
-        onNodeWithText("Try again").assertExists()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Waiting for your agent to use the code…").isNotEmpty() }
         onNode(hasContentDescription("Help")).performClick()
         waitUntil(timeoutMillis = 3000) { onAllWithText("Open ChatGPT plugins").isNotEmpty() }
         onNodeWithText("Any other agent").assertExists()

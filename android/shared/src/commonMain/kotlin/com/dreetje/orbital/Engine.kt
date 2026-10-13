@@ -506,7 +506,7 @@ class Engine(
 
     // Your Dot (ios/engine/agents.js, ui/Agents.kt): the agents linked through orbital.md, linking one with a code as the
     // Mac's Connect your personal agent does, and a node handed to one with a request (Assign to <its name> …) or taken back
-    val agentsOn: List<Agent> get() = agents.filter { it.on }.sortedBy { !it.isDefault } // what Assign to <its name> … offers, the default first
+    val agentsOn: List<Agent> get() = agents.filter { it.on } // what Assign to <its name> … offers
     // the MCP server asked again (Settings, the Connect page): why not, when it could not be reached and the last list is shown
     suspend fun loadAgents(): String? {
         if (isSample) return null
@@ -516,8 +516,9 @@ class Engine(
             list.problem
         } catch (e: Failure) { e.message }
     }
-    suspend fun linkCode(): LinkCode = if (isSample) throw Failure("The sample saves nothing") else call("return await orbital.linkCode()")
-    suspend fun linkStatus(code: String): LinkState = call("return await orbital.linkStatus(code)", mapOf("code" to code))
+    // the sample: an invented code that links nothing, for design shots of Connect your personal agent (the connect extra)
+    suspend fun linkCode(): LinkCode = if (isSample) LinkCode("7KQX-M2PD", now().toEpochMilliseconds() + 900_000.0, "https://orbital.md/mcp", "https://home.tana.inc/mcp", "") else call("return await orbital.linkCode()")
+    suspend fun linkStatus(code: String): LinkState = if (isSample) LinkState("waiting") else call("return await orbital.linkStatus(code)", mapOf("code" to code))
     suspend fun linkCancel(code: String) { maybe { call<Boolean>("return await orbital.linkCancel(code)", mapOf("code" to code)) } } // gone anyway in fifteen minutes
     // throws with what went wrong (not listening yet, did not take it, read-only): handOff says it and keeps the request
     suspend fun hand(id: String, agent: Agent, request: String) {
@@ -529,11 +530,7 @@ class Engine(
         if (isSample) return
         try { call<Boolean>("return await orbital.unhand(id)", mapOf("id" to id)); handed = handed - id } catch (e: Failure) { error = e.message }
     }
-    // Settings' swipes on an agent: Make Default, and Unlink, which also unassigns its nodes (orbital.setDefault, orbital.unlink)
-    suspend fun makeDefault(agent: Agent) {
-        if (isSample) return
-        try { agents = call("return await orbital.setDefault(agent)", mapOf("agent" to agent.id)) } catch (e: Failure) { error = e.message }
-    }
+    // Settings' swipe on an agent: Unlink, which also unassigns its nodes (orbital.unlink)
     suspend fun unlink(agent: Agent) {
         if (isSample) return
         try {

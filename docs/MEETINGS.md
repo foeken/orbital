@@ -314,13 +314,13 @@ words and/or a clock time ("tomorrow 9:30", "fri 10:00-11:30"; a start alone kee
 takes a typed email address. Tana's web client says new attendees get a calendar invite when the organizer's calendar
 can write, so the page warns that one may go out.
 
-## Reading a time (Edit meeting details, #758)
+## Reading a time (Change time, #758)
 
-⌘K **Edit meeting details** sits beside Change time … on the same meetings (one this user may change, not all-day;
-renderer/meeting.js `meetingDetailsRows`). It is one field: the words are read only when ↩ asks
+⌘K **Change time …** reads a plain time itself (renderer/meeting.js `parseMeetingTime`: 14:00, tomorrow 9:30,
+fri 10:00-11:30); any other words get a row that reads them with the AI (`meetingTimeRows`), only when ↩ asks
 (`api.readMeetingTime(words, id)`, `meeting:read` in main/meetings.js, the model reached through `S.readMeetingTime`, which main/ai.js sets), what they came to is shown as the row to press beside the
 meeting as it is, marked "read by AI", and only that press writes it, as a start and an end through `meeting:edit`, the
-write Change time makes. Words typed after a reading are read again; a reading that lands after its page was left draws
+write a plain time makes. Words typed after a reading are read again; a reading that lands after its page was left draws
 nothing. "/" Meeting's when page uses the same reading for words it cannot read itself, with no meeting id: a new
 meeting starting now for half an hour.
 
@@ -352,4 +352,4 @@ time read in a zone the words named has that zone's clock under it ("Tokyo time:
 says so on the page ("Your time · the meeting keeps New York time"; `meeting:info` answers its `timeZone`). Checked
 offline: scripts/sdk-check.js (the transcription request, every rule above, a meeting kept in New York read from
 Amsterdam, the day past midnight, a named and an unknown zone, the summer-time gap, `meeting:read` refusals),
-scripts/renderer-behavior-check.js and the Edit meeting details flow, all on fake answers.
+scripts/renderer-behavior-check.js and the Change time flow, all on fake answers.

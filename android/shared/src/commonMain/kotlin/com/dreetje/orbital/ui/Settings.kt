@@ -42,7 +42,7 @@ import kotlinx.coroutines.launch
 // Settings, opened from the side menu, laid out as the ChatGPT app's: no title, a close button top right, rounded
 // groups under grey headings, each row a line glyph, its words and its value in grey
 @Composable
-fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
+fun SettingsSheet(engine: Engine, connect: Boolean = false, onDismiss: () -> Unit) {
     val c = Theme.colors
     val ai = engine.platform.chatgpt
     var account by remember { mutableStateOf(ai.account()) }
@@ -50,7 +50,7 @@ fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
     var failure by remember { mutableStateOf<String?>(null) }
     var models by remember { mutableStateOf(listOf<ChatGPT.Model>()) } // the choices for Models, read when signed in
     var showModels by remember { mutableStateOf(false) }
-    var connecting by remember { mutableStateOf(false) } // Connect your personal agent (Agents.kt)
+    var connecting by remember { mutableStateOf(connect) } // Connect your personal agent (Agents.kt); open at the start with the connect extra, for design shots
     LaunchedEffect(account) {
         models = if (account == null) emptyList() else maybe { ai.models() } ?: emptyList()
         if (models.isNotEmpty()) { engine.translator.catalogue = models; engine.loadPrompts() } // the choices shown are the ones asked, named as the Mac names them
@@ -74,7 +74,7 @@ fun SettingsSheet(engine: Engine, onDismiss: () -> Unit) {
                 Group("Tana") { GroupRow(last = true) { Label("tana", "Account"); Text(engine.email ?: "Tana", color = c.secondary) } }
             }
             item("chatgpt") {
-                Group("ChatGPT", footer = "Your ChatGPT account is for the AI in Orbital and for Codex on your hosts. It stays on this phone.") {
+                Group("ChatGPT", footer = "Your ChatGPT account is for the AI in Orbital. It stays on this phone.") {
                     val a = account
                     if (a == null) GroupRow(last = true, onClick = { signingIn = true }) { Label("chatgpt", "Sign in with ChatGPT") }
                     else {

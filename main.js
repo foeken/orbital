@@ -24,6 +24,7 @@ const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, s
 const { nodePin, pinTree, tellSidebars, weekNode, weekTitle } = require('./main/pins');
 const inbox = require('./main/inbox');
 const proposalsPage = require('./main/proposals');
+const agentChats = require('./main/agentchats');
 const timelinePage = require('./main/timeline');
 const icons = require('./main/icons');
 const settings = require('./main/settings');
@@ -56,7 +57,7 @@ function keepHome(wc) {
 // ipc = { 'channel': (event, ...args) => … }. preload.js names each channel for the page. What main.js registers
 // itself is Electron's: windows, overlays, shell (the Codex handoff opens Codex through it), app paths, and settings
 // sent to the other pages; plus outline:children, which routes between several modules.
-for (const m of [require('./main/documents'), agents, require('./main/chatagents'), require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, presence, meetings, require('./main/meeting-notes'), require('./main/images'), icons, require('./main/related'), require('./main/rows'), settings, require('./main/flags'), decisions, updater]) {
+for (const m of [require('./main/documents'), agents, require('./main/chatagents'), agentChats, require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, presence, meetings, require('./main/meeting-notes'), require('./main/images'), icons, require('./main/related'), require('./main/rows'), settings, require('./main/flags'), decisions, updater]) {
   for (const [channel, handle] of Object.entries(m.ipc)) ipcMain.handle(channel, handle);
 }
 
@@ -97,12 +98,12 @@ const tellShell = (win, cmd, arg) => { const wc = win.shell && win.shell.webCont
 // Signed out, every page is the same login button, so the shell shows page '' alone and keeps the layout aside for
 // after the login (relayout tells it, 'auth'); main keeps saving the layout it had.
 const signedOut = () => S.status.authChecking === false && S.status.authenticated === false;
-// The Work View's layout (renderer/timeline.js): '' beside '2', in Trellis's document format. A first launch opens it,
+// The Default View's layout (renderer/timeline.js): '' beside '2', in Trellis's document format. A first launch opens it,
 // and a window saved split before the workspace (v1: { split: true, splitAt }) comes back as it.
 const pair = (at) => ({ schema: 1, root: { kind: 'split', id: 'split-work', axis: 'x', weights: [at, 1 - at],
   children: ['', '2'].map((id) => ({ kind: 'panel', id: 'panel-work' + id, views: ['page' + id], selected: 'page' + id })) },
 floating: [], hidden: [], views: { page: { type: 'page', params: { side: '' } }, page2: { type: 'page', params: { side: '2' } } } });
-const WORK_SPLIT = 0.6; // the Work View's Timeline takes 60% of the width, My Tasks 40%
+const WORK_SPLIT = 0.6; // the Default View's Timeline takes 60% of the width, My Tasks 40%
 const savedDoc = (saved) => (!saved ? pair(WORK_SPLIT) : saved.doc && typeof saved.doc === 'object' ? saved.doc
   : saved.split === true ? pair(saved.splitAt > 0 && saved.splitAt < 1 ? saved.splitAt : 0.5) : null);
 // the page ids a layout holds (view 'page' + id), in its order; a window without one shows page ''
@@ -176,7 +177,7 @@ function fit(win) {
   const { width, height } = win.getContentBounds();
   for (const v of [win.shell, win.overlay]) if (v) v.setBounds({ x: 0, y: 0, width, height });
 }
-// A new page (⇧⌘N to the right, ⌘N a tab, ⌥⌘N a floating pane; the Work View's '2'), beside the page that asked (from). Its id
+// A new page (⇧⌘N to the right, ⌘N a tab, ⌥⌘N a floating pane; the Default View's '2'), beside the page that asked (from). Its id
 // is main's to give, so the page asking can store its place under it first; the layout report that follows saves it.
 function openPage(win, { id = freeId(), where = 'right', from, focus = true }) {
   win.pages.push(id);
@@ -275,7 +276,7 @@ function createWindow() {
   const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!win.isDestroyed() && win.primary) db.setSetting('window', { ...win.getNormalBounds(), maximized: win.isMaximized(), doc: win.doc }); };
   const saveSoon = () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(saveBounds, 500); };
   win.panes = []; win.saveBounds = saveBounds; win.saveSoon = saveSoon; // a layout the shell reports is saved too
-  // the layout comes back with the frame it was saved with, and a first launch (nothing saved) opens the Work View, the
+  // the layout comes back with the frame it was saved with, and a first launch (nothing saved) opens the Default View, the
   // Timeline beside My Tasks (renderer/edit.js reads which page it is). Another window opens with one page, under an id
   // that may have been a closed page's: it keeps nothing of that page, and starts where the page that asked is (window:new).
   win.primary = !front;
@@ -345,7 +346,7 @@ function createMenu() {
 }
 
 // events start with an empty content map (no doc node yet); readOutline needs the children list
-ipcMain.handle('outline:children', (e, id) => { const page = pageOf(e); return (id === inbox.PAGE ? inbox.rows() : id === proposalsPage.PAGE ? proposalsPage.rows() : id === timelinePage.PAGE ? timelinePage.rows((part) => { if (page) page.send('timeline:part', part); }) : isSearch(id) ? searchChildren(id, page ? page.id : 'main') : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))); });
+ipcMain.handle('outline:children', (e, id) => { const page = pageOf(e); return (id === inbox.PAGE ? inbox.rows() : id === proposalsPage.PAGE ? proposalsPage.rows() : id === agentChats.LIST ? agentChats.list() : agentChats.isChat(id) ? agentChats.rows(id) : id === timelinePage.PAGE ? timelinePage.rows((part) => { if (page) page.send('timeline:part', part); }) : isSearch(id) ? searchChildren(id, page ? page.id : 'main') : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))); });
 // The renderer's preferences, from the same store: a synchronous snapshot at load (preload reads it before the
 // first paint) and one write per change.
 // the menu shows ⌃⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
@@ -392,7 +393,7 @@ ipcMain.on('page:gone', (e) => {
 ipcMain.handle('overlay:open', (e, which, theme, at) => { openOverlay(pageOf(e), which, theme, at); });
 ipcMain.handle('overlay:close', (e, result) => { closeOverlay([...S.windows].find((w) => w.overlay && w.overlay.webContents === e.sender), result && typeof result === 'object' ? result : {}); });
 // Cmd+K Save view and Saved views (issue #442): the layout this window has (null: page '' alone, never rearranged), and
-// one to put it back to; 'workView' is the Work View's, the one a first launch opens (pair). The pages' places are
+// one to put it back to; 'workView' is the Default View's, the one a first launch opens (pair). The pages' places are
 // theirs, written by the page that asked (renderer/palette.js); the shell reloads, starts from this layout
 // (shell:state) and every page opens where the view was saved.
 ipcMain.handle('window:layout', (e) => pageOf(e)?.win?.doc || null);
@@ -477,7 +478,7 @@ ipcMain.handle('chatgpt:login', async () => {
   if (!result.verificationUrl) return result;
   try {
     const loginUrl = new URL(result.verificationUrl);
-    if (loginUrl.protocol !== 'https:') throw new Error('Codex returned an invalid ChatGPT sign-in URL');
+    if (loginUrl.protocol !== 'https:') throw new Error('ChatGPT returned an invalid sign-in URL');
     await shell.openExternal(loginUrl.toString());
   }
   catch (error) { await ai.cancelChatGPTLogin(app.getPath('userData')); throw error; }
@@ -490,6 +491,7 @@ ipcMain.handle('icons:setType', async (_e, typeUri, name) => {
   await refresh({ after: true }); // the cached rows carry the icon name, so they are rebuilt before anything is told to redraw
   send('outline:changed', null);
   tellSidebars(); // a pinned search or document wears it there too (shell.js)
+  if (agentChats.isChat(typeUri)) agentChats.tellList(); // an agent chat's on its list and in the sidebar's Agent chats
   return chosen;
 });
 // After each start: the fast AI picks a glyph for every titled type and field that has none (issues #250, #606). In the
@@ -708,5 +710,5 @@ if (process.env.TANA_MAIN_TEST) {
   });
 
   app.on('window-all-closed', () => {}); // stay in the Dock (activate above)
-  app.on('before-quit', () => { if (S.client) S.client.close().catch(() => {}); agents.stop(); ai.stop(); }); // no writer outlives the app that spawned it
+  app.on('before-quit', () => { if (S.client) S.client.close().catch(() => {}); agents.stop(); agentChats.stop(); ai.stop(); }); // no writer outlives the app that spawned it
 }

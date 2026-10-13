@@ -195,6 +195,8 @@ function translateNodes(list, to) {
       item.node.text = found.text; item.node.segments = item.node.kind === 'document' ? undefined : [{ text: found.text }];
       done++;
     }
+    // nothing came back and nothing could have: signed out, the model was never asked (main/ai.js translate answers nulls)
+    if (!done && typeof chatgptAuth !== 'undefined' && chatgptAuth && !chatgptAuth.signedIn && !chatgptAuth.apiKey) throw new Error('Sign in with ChatGPT or add an OpenAI API key to translate');
     showNote(done ? 'Translated ' + (list.length > 1 ? done + ' of ' + list.length + ' nodes' : 'it') + ' into ' + to : 'Already in ' + to);
     render(true);
   });

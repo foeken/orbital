@@ -26,7 +26,7 @@ function openHelp(at) {
 // tour's phone page does. Asked once as the page loads; main asks GitHub once an hour at most for every page.
 let androidDownload = null;
 if (tana.androidRelease) tana.androidRelease().then((r) => { androidDownload = r; }, () => {});
-// A first start, from the first page: the Work View's second pane opens beside it and stays quiet. Only once signed
+// A first start, from the first page: the Default View's second pane opens beside it and stays quiet. Only once signed
 // in and connected (renderer/app.js), and only if main says so (help:claim): it answers once the settings document has
 // been read, and yes to one page only. Over the login the tour taught a window nobody could use yet, a new machine went
 // by its own empty copy and showed it to you again, and every open window showed it at once.

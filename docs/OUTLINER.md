@@ -462,7 +462,7 @@ owned by the page and the block (main/images.js), outside the renderer's write q
   by Responsibility) drafts a task under it in the same section (drag.js `groupDraft`), and creates it with what puts a
   task there: the same writes as a task dropped on that heading (`groupDropWrites`, #169) read off a new task, which
   starts open and yours. Unassigned takes you off, My inbox / Waiting / My later / My completed set the state, Pinned pins it to
-  today. Agent opens the Assign to Agent prompt once it exists, and Tracking takes you off, watches it and opens the
+  today. Agent opens the Assign prompt once it exists, the agents that are on listed under it to pick from, and Tracking takes you off, watches it and opens the
   assignee picker for who you are waiting on. Assigned by others drafts nothing: only somebody else puts a task there.
 - **`api.createDocument(title, { kind, typeUri?, start?, end? })`** makes a `doc` (plain, the default), a `task` (`stateType: 'open'`,
   assigned to you, with a workflow type when `typeUri` names one), a `meeting` (a `tana:event:` laid out like a
@@ -483,7 +483,7 @@ audience disclosure and preview token are the gate (§14).
 **Opening elsewhere** (issues #443, #608): ⌘ opens a place as a new tab in this pane (as browsers and Obsidian do), ⇧ in
 a new pane beside this one (as Roam's and Logseq's sidebar), ⌥ in a new floating pane (renderer/palette.js `elsewhere` and
 `openElsewhere`, which stores the place under the id main gives the new page, as ⇧⌘N does). In Cmd+K
-and Cmd+S that is ⌘↩ / ⇧↩ / ⌥↩, or ⌘- / ⇧- / ⌥-click, on a row that opens a place (search results, saved searches, types, Today and This week:
+and Cmd+S that is ⌘↩ / ⇧↩ / ⌥↩, or ⌘- / ⇧- / ⌥-click, on a row that opens a place (search results, saved searches, types, and every Views row: Today and This week, Timeline, Notifications, Proposals, Agent chats, and the Library, Inbox and Types as views themselves, `opensView`;
 rows with `opens`, an id or a function finding it), also when pressed before the search has answered; while an @ link
 is being made ⌘↩ still creates. On the outline it is ⌘-click / ⇧-click / ⌥-click on a bullet, and ⌥-click on a
 row that opens on a click (⌘- and ⇧-click there keep selecting rows; a Timeline row opens on ⌘-click too).
@@ -557,10 +557,10 @@ Cmd+K leads with a Selection group for it (§8).
   When the page on screen is deleted or archived (here, in another pane or in Tana), the pane goes back to the page
   before it in its history, and the deleted page leaves both stacks; with nothing to go back to, it shows the Library
   (renderer/edit.js `leaveGonePage`).
-- **Home** is the **Work View** by default (§16), or the window as it was when you chose Cmd+K "Set as Home"
+- **Home** is the **Default View** by default (§16), or the window as it was when you chose Cmd+K "Set as Home"
   (`setHome`): its panes and what each shows, kept as the saved view "Home" (`HOME_VIEW`, listed under Saved views, where
   it is removed or, saved again under that name, replaced) and stored as `homeView` in the synced `home` preference. A
-  page is at Home on the place that view keeps for it; removed, Home is the Work View again. A Library or saved search
+  page is at Home on the place that view keeps for it; removed, Home is the Default View again. A Library or saved search
   chosen as Home before still works, stored as its id (`library` or a `tana:search:` uri), and opens as a window of one
   pane on it, like every Home. Every route Home goes through
   `goHome`; Cmd+K "Go to Home" names it and always runs, reopening the whole window: a page sees only its own pane, so it
@@ -573,7 +573,7 @@ Cmd+K leads with a Selection group for it (§8).
   has from it: Chromium has lost a profile's localStorage whole, and every tab then opened on My Tasks (#636). Boot seeds the page from it
   before the first render, so a launch opens on that page with its header and the loader; `restorePlace` then reads
   the real node, and a page that is gone leaves the launch on the view. Children are asked for only once connected,
-  and the page you were on is fetched before the view behind it. A launch with nothing stored opens the Work View.
+  and the page you were on is fetched before the view behind it. A launch with nothing stored opens the Default View.
 - **Recently viewed**: the last 20 documents opened, most recent first, in localStorage `recent`; the search palette
   shows them under "RECENTLY VIEWED" with an empty query.
 
@@ -606,36 +606,38 @@ caret goes back to. That holds for every page opened through `showPage` (⌘K an
 Table, Views (`VIEW_ORDER`: Timeline, Today, This week, Inbox, Notifications, Proposals, Library, Types),
 Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings, Help.
 
-- **Current node** is the zoomed node or the row under the caret (with a selection, the Selection group counts what
+- **Current node** is the zoomed node or the row under the caret, or the one row selected with no caret (a list row
+  picked by a click: on My Tasks the task, never the search; renderer/document.js `currentDoc`), whose rows all come
+  under Selection, Complete and Expand included, and whose recorded keys act on it too (with a selection, the Selection group counts what
   each row acts on and says "N skipped" for rows it cannot). Its rows follow `NODE_ROW_ORDER` (renderer/palette.js)
   whichever file builds them: the focused field's rows; Open node (the row under the caret, or the one selected row, opened as the mouse opens it: zoomed into, a reference's target, what a Timeline row or notification opens; absent on the page you are in and for a selection of several), Expand, Collapse; the task state (Complete/Reopen,
-  Mark as read/unread, Approve/Reject proposal, Set status); who has it (Edit assignees, Assign to …, Discuss with …,
+  Mark as read/unread, Approve/Reject proposal, Set status); who has it (Edit assignees, Assign to …, Unassign, Discuss with …,
   Add to chat …);
-  a meeting's Change time / location, Edit meeting details, Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
+  a meeting's Change time / location (a time typed plainly or read by the AI), Add attendee; when and where it lives (Pin to today / tomorrow / date …, Pin to
   current meeting, Pin to meeting …, Edit pins, Add to Today / Tomorrow / This Week, Move to …, Move to Library); what
   it is (Set type, Auto-pick type, Remove type, Add field, Edit fields); how it looks (Set icon, Set field icon, Set colour, Mark as
-  sensitive); the agents (Assign to Agent, Go to <agent> task, Link <agent> task …, Open in <agent>, one of each for every agent that is on); Edit visibility, Add participants … (Edit
+  sensitive); the agents (Assign to <agent> …, Go to <agent> task, one of each for every agent that is on); Edit visibility, Add participants … (Edit
   visibility at its Select people step when the document may be shared with people, renderer/access.js `addParticipants`), Notify on changes,
   Copy link, Export to PDF; last Archive type and Delete. A read-only node shows Delete disabled.
 - **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
   by, each hinting its value — then Clean up, Save as new search (a view with pills, as its Save as search pill; issue #538),
   Filter rows by text, Switch to table/outliner and Column widths ….
-- **Actions**: Log in (signed out), Create new …, Quick Add Task, Meet Now (a meeting called Meeting, now for 30 minutes, opened in Tana), New canvas, Suggest sensitive marks (the Decisions API flag on: §17), Search Tana, Undo, Redo, Mark all as read, Sync.
+- **Actions**: Log in (signed out), Create new …, Quick Add Task, Meet Now (a meeting called Meeting, now for 30 minutes, opened in Tana), New chat with ChatGPT (Codex on this Mac: an empty agent chat, docs/CHATS.md §13), New canvas, Suggest sensitive marks (the Decisions API flag on: §17), Search Tana, Undo, Redo, Mark all as read, Sync.
 - **Navigate**: Go back, Go forward, Go to Home, Set as Home, Focus graph (with a Graph pane, §18), Recently
   deleted, Archived types.
 - **Window**: New window, New pane, New tab, New floating pane; with more than one page Next / Previous pane, Next / Previous
   tab, Maximize or restore pane, Show all panes, Zoom back / forward and Close pane (its chip ⌘W, the File menu's Close;
-  panes change places by dragging a tab); Show/Hide graph (§18), Reload (the window: every pane), Save view…, Remove saved view (its choices also found from the command page).
-- **Saved views** (issue #442): one row per view, the Work View first. A view is the window's layout (Trellis's
+  panes change places by dragging a tab); Show/Hide graph (§18), Reload (the window: every pane), Save view …, Remove saved view (its choices also found from the command page).
+- **Saved views** (issue #442): one row per view, the Default View first. A view is the window's layout (Trellis's
   document, `window:layout`, without its zoom: a view opens with every pane shown) and each page's view and place (`view`/`place`, `view:2`/`place:2`, …), under a name,
-  in the synced `savedViews` preference. Save view… names the current one, or updates a saved view listed under
+  in the synced `savedViews` preference. Save view … names the current one, or updates a saved view listed under
   it (narrowed by what is typed; its name and id kept, so Home and a recorded key still find it); choosing a row writes the places back and hands main the layout (`window:setLayout`), which saves it and reloads
-  the window, so every page opens where it was saved. Remove saved view takes one off the list, any but the Work View, which is always listed (replaced, never removed).
+  the window, so every page opens where it was saved. Remove saved view takes one off the list, any but the Default View, which is always listed (replaced, never removed).
   A page on your day node for today or your node for this week (known by id, found at Save view and never made: renderer/palette.js
   `saveView`) is saved as that (`{ today: true }`, `{ week: true }`) and opens on the day and week the view is opened in, the node found
   or made then as Cmd+K Today and This week do; Home counts such a page as Home on the page titled with today's date or this week (issue #639).
 - **Settings**: Open settings (⌘,, the Settings window: §16), Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode (on out of the box, until a theme is chosen: #632), Edit hidden items,
-  Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Choose models …, Enable feature flag / Disable feature flag (each a page of the flags it would switch, on this Mac only, main/flags.js; typing on names one: "Enable feature flag Decisions API"), Choose agents …, Connect your personal agent …, ChatGPT sign-in, Set OpenAI API
+  Toggle sensitive visibility, Toggle chats made by tools, Toggle demo mode, Choose models …, Enable feature flag / Disable feature flag (each a page of the flags it would switch, on this Mac only, main/flags.js; typing on names one: "Enable feature flag Decisions API"), Choose agents …, Connect your personal agent …, ChatGPT sign-in, Set OpenAI API
   key (only while a key is stored). **Help**: Help, Install mobile app (hint "iPhone from TestFlight, Android with Obtainium" once the latest release has the APK, "…, Android coming soon" before: the Help tour opened on its last page, the
   choice of phone: the one place the phone apps are installed from), Open Manual (https://orbital.md/manual in the browser, in the page's theme: manual/, published there at each
   release), Check for updates (the app menu's Check for Updates…: a newer release opens the update card below, a dialog says up to date), and About Orbital: a page with the website and the licence as links, the big dependencies
@@ -662,7 +664,7 @@ one.
 the last page left behind and takes the new page's rows and back step; Escape (`backPalette`) goes where the page says:
 the command page, or for a page opened from elsewhere, the page that opened it. The pages are described with their features: Set type, Auto-pick type, Set icon, Set colour,
 Discuss with (§11); Edit pins, Pin to date, Pin to meeting (§9); Recently deleted, Archived types (§14); Change time /
-location, Edit meeting details, Add attendee ([MEETINGS.md](MEETINGS.md)); the agent pages (renderer/agent.js, §11).
+location, Add attendee ([MEETINGS.md](MEETINGS.md)); the agent pages (renderer/agent.js, §11).
 
 ### Built-in keys and the recorder
 
@@ -901,35 +903,32 @@ wrong twenty.
   Decisions API instead (main/decisions.js, `gpt-6-luna`, the API key only: it refuses a ChatGPT sign-in); without a key
   it keeps the way above. The rest stay on the Quick AI: the Decisions API was slower or missed more for them (issue #807).
 - **The agents** (main/agent.js, main/agents/, renderer/agent.js, issue #669). Each agent is a plugin in main/agents/:
-  **Tana** (always on, and the default on a fresh install: a task is a new Tana chat with the request and the node
+  **Tana** (always on: a task is a new Tana chat with the request and the node
   attached, answered by Tana's AI, and its badge opens the chat here), **Codex** (a Codex task on this Mac, through
-  Codex's app-server), **Claude** (a `claude -p` session of the user's own Claude Code, with its own sign-in;
-  Orbital never signs in to Anthropic) and every agent linked through orbital.md/mcp, your Dot among them (below). Codex and
-  Claude are offered only once this Mac has them. **Choose agents …** (Settings) lists them, greyed with what to install
-  when missing: ↩ switches one on or off; **Set default agent …** picks the **default agent** on a page of its own. Both
-  follow you (`agents`, `defaultAgent`); unset is Tana and Codex on, Tana the default.
+  Codex's app-server) and every agent linked through orbital.md/mcp, your Dot among them (below); **Claude** is listed
+  grey as Coming soon until it comes back properly. Codex is
+  offered only once this Mac has it. **Choose agents …** (Settings) lists them, greyed with what to install
+  when missing: ↩ switches one on or off, which follows you
+  (`agents`); unset is Tana and Codex on.
   **Connect your personal agent …** (Settings, and under the linked agents in Choose agents) links your own agent (your
   Dot, or any agent that speaks MCP) through the MCP server orbital.md/mcp: both plugins, each server's name with its URL
   (↩ copies it), and How to add them …, a page of the steps (Open ChatGPT plugins and one paragraph for your Dot, one for
-  any other agent, which needs MCP events), then the instructions carrying a one-time code that links it by its own name (Dot if it has none), makes it the default
-  agent, and subscribes it to the task.assigned
+  any other agent, which needs MCP events), then the instructions carrying a one-time code that links it by its own name (Dot if it has none), switches it on, and subscribes it to the task.assigned
   event (a node handed to it is that event: the node's id, the request and how to handle it, nothing of the request
   written into the node, which the Dot reads as content; its badge follows the node's last line, "Agent status: Assigned |
   Working | Completed | Failed": Orbital writes Assigned, grey until the Dot changes it to Working as it starts); each linked agent is one more agent,
-  listed with the other agents in Choose agents, with a page of its own (Rename …, Switch off, Unlink); **Set default agent …** picks the default on a page of its own, and **Reset agent link key** makes a new key for your Orbital at orbital.md (docs/MCP-SERVER.md).
-  **Assign to Agent** asks what the agent should do (a prompt page, with the agents that are on listed under it and the
-  default ticked; beside it **Assign to <agent> …** for each agent that is on, Assign to Codex …, Assign to Echo …, opens
-  the same page with that agent picked) and hands the node over; the agent's own default model does the work. The node then carries the agent
-  badge, which says what the task is doing, read every 30 s while anything is assigned; a Claude task, whose session
+  listed with the other agents in Choose agents, with a page of its own (Rename …, Switch off, Unlink); **Reset agent link key** makes a new key for your Orbital at orbital.md (docs/MCP-SERVER.md).
+  **Assign to <agent> …**, one row for each agent that is on (Assign to ChatGPT …, Assign to Echo …; there is no
+  default, you pick the one you want), asks what that agent should do on a prompt page and hands the node over; the agent's own default model does the work. The node then carries the agent
+  badge, which says what the task is doing, read every 30 s while anything is assigned; a task of a local agent, which
   lives only on the Mac that ran it, names that Mac in its link and reads **Agent on another Mac** (grey, not a button)
-  anywhere else, where assigning starts a new one (main/agent.js `elsewhere`). Assign to Agent stays offered on a node an agent already has:
-  handing it over again replaces the request in its Agent context block. Codex and Claude are handed the request typed
-  here as the work, with the node's uri to read as its context (main/agent.js `agentPrompt`): what they read in Tana,
-  the Agent context block included, is material anyone the node is shared with can edit, never instructions. **Unassign from Agent** takes it back at once,
+  anywhere else, where assigning starts a new one (main/agent.js `elsewhere`). Assign to <agent> … stays offered on a node an agent already has:
+  handing it over again replaces the request in its Agent context block. Codex is handed the request typed
+  here as the work, with the node's uri to read as its context (main/agent.js `agentPrompt`): what it reads in Tana,
+  the Agent context block included, is material anyone the node is shared with can edit, never instructions. **Unassign** (one row for an agent and people alike) takes it back at once,
   and takes the Agent context block (with its status line) out of the node again. **Go to <agent> task** opens it (Codex
-  in Codex, Claude in Terminal on `claude --resume`, Tana's chat here; not offered for a Dot, whose task lives in ChatGPT, and its
-  badge is no button). The Timeline's task rows carry the badge too, in line after the title; its lines about what happened do not, **Link <agent> task …** links a task that already exists, and **Open in <agent>** opens a new task with the
-  node's link and tracks nothing. Codex and Claude tasks run on this Mac, Tana's in Tana, and a Dot's in ChatGPT.
+  in Codex, Tana's chat here; not offered for a Dot, whose task lives in ChatGPT, and its
+  badge is no button). The Timeline's task rows carry the badge too, in line after the title; its lines about what happened do not. Codex tasks run on this Mac, Tana's in Tana, and a Dot's in ChatGPT.
 
 - **Auto-translate** (issue #547): off until Cmd+K **Auto-translate …** (Settings) picks the language notes are shown in
   (English, Dutch, German, French or Spanish; a synced preference, `translateTo`). Then a note in another language is
@@ -1102,7 +1101,7 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   |---|---|---|
   | Unassigned | Off the agent, every day pin removed, no assignees | a task you did not make |
   | Tracking | Off the agent, every day pin removed, watched | unless you made it and it is someone else's |
-  | Agent | the Assign to Agent prompt; nothing until it is sent | — |
+  | Agent | the Assign prompt, the agent picked there; nothing until it is sent | — |
   | My inbox, Mine, Waiting, My completed, My later | Off the agent, every day pin removed, you as the only assignee, the status; a watch on a task you were not assigned is forgotten | a task you did not make |
   | Pinned | Off the agent, pinned to today unless pinned to a day already; a completed task reopens, one in the Inbox or Waiting is In Progress | — |
   | Assigned by others | — | always: it is about who made it |
@@ -1293,9 +1292,9 @@ at load (renderer/edit.js), so nothing asks Tana for that id.
     Out), the OpenAI API key only while one is stored (Remove), both **On this Mac**; the Quick and the Regular AI, a model
     and its thinking each (the synced settings.AI_KEYS over `ai:options`/`ai:setOption`, which take only main/ai.js's own lists).
   - **Agents**: a switch per agent (Tana always on; one not installed greyed with what to install, still switchable off if
-    another Mac switched it on) and the default agent.
+    another Mac switched it on), and Unlink beside a linked one.
   - **Hidden** (eye-slash): the hidden titles as a list with + and − under it (+ and a title hides it, − or ⌫ on the selected one unhides
-    it) and Show MCP chats.
+    it) and Show chats made by tools.
   Every control makes the call its Cmd+K row makes, so a choice made there and one made here are the same write. Main
   sends the window what it sends the pages (main/state.js `send`, main/settings.js `tellOthers`): a setting changed in a
   page, another window or another Mac reads the window again, and only the newest answer for each part lands (`load`).
@@ -1328,24 +1327,24 @@ empty message switches it. Picking a skill switches to To Tana, and it stays the
 (renderSegs/readSegs); ⌘Z and the other editing keys stay its own rather than reaching the outline. What is typed and not sent is kept per chat while the window is open.
 Opening a chat puts the caret in it. After a send, three dots stand where the answer will be until Tana's answer begins (two minutes
 at most); the answer streams in as live changes to the chat, and a message Tana is still writing with no words yet
-shows the dots in its place. A failed send puts the words back. **@Codex** (offered after Tana in "@") asks a Codex task on this Mac instead, and nothing of it reaches Tana: the question shows on your side in a grey bubble where it was asked, "@Codex" in bold, and the answer under it on the other side as a reply, in grey text, with dots until it arrives; each carries the cloud-slash glyph (as a badge on the top-right corner of the question’s bubble, and plain after Codex’s name over the answer) whose tooltip says it is only visible for you, on this device; **Add to message** on Codex’s name line (once the answer is in), Enter on the answer, or Cmd+K **Add Codex’s answer to message**, adds it to the message box to send as your own words (docs/CHATS.md §12). The questions and answers are kept on this Mac, so they are there again after a restart. **By keyboard**: ↑ at the very start of the message box selects the newest message, and ↑↓ with nothing focused go on from the selected message or, with none, select the lowest (↑) or highest (↓) message in view; ↑↓ walk the messages (a focus ring on the bubble, or around a message without one), ↓ past the last or Esc goes back to the box, Enter on a Codex answer adds it to the message box, and ⇧⌘⌫ or Cmd+K **Delete message** deletes the selected message when it is yours: your own message in the chat for everyone, as Tana's Delete message does (`chat:delete`), or a Codex question with its answer from this Mac (`chatAgent:delete`). The selection survives a redraw. With a message selected, Cmd+K opens with that message's own rows under **Message** at the top (Delete message; for a Codex question or answer also Add … answer to message and Open … task), and nothing that acts on the chat document itself (the Current node rows: pins, link, visibility, move, delete, export) is offered, nor does a recorded key for one of them act; with none selected, Add … answer and Open … task act on the latest ask, under Actions. **New chat** (Cmd+K, Actions) makes a chat with
+shows the dots in its place. A failed send puts the words back. **@ChatGPT** (offered after Tana in "@") asks a Codex task on this Mac instead, and nothing of it reaches Tana: the question shows on your side in a grey bubble where it was asked, "@ChatGPT" in bold, and the answer under it on the other side as a reply, in grey text, with dots until it arrives; each carries the cloud-slash glyph (as a badge on the top-right corner of the question’s bubble, and plain after Codex’s name over the answer) whose tooltip says it is only visible for you, on this device; **Add to message** on Codex’s name line (once the answer is in), Enter on the answer, or Cmd+K **Add Codex’s answer to message**, adds it to the message box to send as your own words (docs/CHATS.md §12). The questions and answers are kept on this Mac, so they are there again after a restart. **By keyboard**: ↑ at the very start of the message box selects the newest message, and ↑↓ with nothing focused go on from the selected message or, with none, select the lowest (↑) or highest (↓) message in view; ↑↓ walk the messages (a focus ring on the bubble, or around a message without one), ↓ past the last or Esc goes back to the box, Enter on a Codex answer adds it to the message box, and ⇧⌘⌫ or Cmd+K **Delete message** deletes the selected message when it is yours: your own message in the chat for everyone, as Tana's Delete message does (`chat:delete`), or a Codex question with its answer from this Mac (`chatAgent:delete`). The selection survives a redraw. With a message selected, Cmd+K opens with that message's own rows under **Message** at the top (Delete message; for a Codex question or answer also Add … answer to message and Open in …), and nothing that acts on the chat document itself (the Current node rows: pins, link, visibility, move, delete, export) is offered, nor does a recorded key for one of them act; with none selected, Add … answer and Open in … act on the latest ask, under Actions. **New chat with Tana** (Cmd+K, Actions) makes a chat with
 Tana that is yours alone (`chat:new`) and opens it.
-**Add to chat …** (Cmd+K, `addToChat`, on the row under the caret, the zoomed node or a selection: "Add 3 items to chat …") opens a page with **New chat** and the chats, last changed first, and puts references to them at the start of the picked chat's message: the same ones dragging the rows onto it makes (a document or a reference as a chip, a block's words as text), the message's own words on the line after them and the caret back where it was in them; an empty message just gets them, the caret after. A chat another pane of the window shows is brought into view there (its tab selected) and takes the keys (shell.js `addToChat`); any other chat, and a new one, opens in the pane the row ran in.
+**Add to chat …** (Cmd+K, `addToChat`, on the row under the caret, the zoomed node or a selection: "Add 3 items to chat …") opens a page with **New chat with Tana** and the chats, last changed first, and puts references to them at the start of the picked chat's message: the same ones dragging the rows onto it makes (a document or a reference as a chip, a block's words as text), the message's own words on the line after them and the caret back where it was in them; an empty message just gets them, the caret after. A chat another pane of the window shows is brought into view there (its tab selected) and takes the keys (shell.js `addToChat`); any other chat, and a new one, opens in the pane the row ran in.
 
 When Tana's AI asks questions (`row.chat.questions`, docs/CHATS.md §11), the composer gives way to a question card
 like Codex's (`#chatQuestion`): one question at a time with "‹ 2 of 3 ›", its options numbered with the highlighted one on
 a grey band, "Select all that apply" and ticks for a multiple choice, the last row a free answer ("No, and tell Tana what to
 do differently"), then Dismiss (esc) and Continue (↩), Submit on the last. ↑↓ move, 1–9 pick, Space ticks, ↩ continues
 (taking the highlighted option when nothing is picked), ←→ step between questions, Esc dismisses (Tana goes on with
-defaults). Submitting writes the answers (`chat:answer`) and Tana goes on. **Invite to chat…** (Cmd+K on a chat) lists
+defaults). Submitting writes the answers (`chat:answer`) and Tana goes on. **Invite to chat …** (Cmd+K on a chat) lists
 the workspace's members; the one picked joins the chat as an editor (`chat:invite`), and "<name> was added to the
 chat." shows as a centred status line, as other status lines do. **New chat with …** (Cmd+K, anywhere) lists the
 same members: a new chat opens, yours alone until then, and the one picked is invited to it, so it is visible to the
 two of you; a refused invite says why over the open chat (renderer/chat.js `newChatWith`: `chat:new`, open, then `chat:invite`).
 
-### Work View, windows and panes
+### Default View, windows and panes
 
-- **Work View** (`workView`, renderer/timeline.js; the default Home): the Timeline on the left and My Tasks on the
+- **Default View** (`workView`, renderer/timeline.js; the default Home): the Timeline on the left and My Tasks on the
   right (`api.myTasks`: the search the synced `myTasks` setting names, so a rename in Tana keeps it; else your own
   saved search called My Tasks, the oldest if two machines each made one, hidden title or not; else one made from the My
   Tasks preset with the Library's arrangement, and remembered. Only a deletion in Tana makes a fresh one). It is the
@@ -1535,7 +1534,7 @@ structure; an unsandboxed `electron scripts/pdf-check.js --render` writes three 
   machine (localStorage `demoMode`), read before the first render.
 - **Hidden items** (`api.filters()`/`addFilter`/`removeFilter`; Cmd+K Edit hidden items): title patterns
   (the whole title, or a prefix with a trailing `*`, case-insensitive) that drop matching nodes from every list and
-  search. A hidden node opened directly still opens. **Toggle MCP chats** hides MCP chats the same way (docs/CHATS.md).
+  search. A hidden node opened directly still opens. **Toggle chats made by tools** hides MCP chats the same way (docs/CHATS.md).
 
 ## 18. The Graph pane
 
@@ -1628,14 +1627,27 @@ rows are grey glyphs and words, and each acts in the page the Graph pane would f
 take the keys.
 
 - **Search** (with the page's ⌘S, which the page tells the shell on every layout message, `{ orbital: 'keys' }`),
-  **Home** (Cmd+K Go to Home) and **Today** (Cmd+K Today) run those rows there.
+  **Home** (Cmd+K Go to Home), **Timeline** (Cmd+K Timeline, marked while the Timeline is on screen) and **Today** (Cmd+K Today) run those rows there.
+- **A row dragged onto a chat** in the sidebar (a pinned Tana chat or an agent chat) goes into that chat's message as a
+  reference, in the pane that shows the chat or, with none, in the page the rows act in, which opens it (shell.js
+  `sbChatDrop` → the page's `compose` with the dragged rows → renderer/chat.js `composeInto`, as ⌘K Add to chat). On a chat's own
+  page a drop anywhere on the conversation does the same (renderer/chat.js `chatScroll`).
+- **⌘-, ⇧- and ⌥-click** on Timeline, Today, a pin or an agent chat open it as a tab in that page's pane, in a pane beside it
+  or floating, as a ⌘-click does in the pages (shell.js `sbWhere`, the page's `goto`/`action` with `where`, renderer/palette.js
+  `runAction`: a row's `opens`). Search and Home have no single place to open there, and stay plain clicks.
 - Then **your sidebar pins as Tana keeps them** (docs/PINNING.md §1): the pins at the top level under **Pinned**, then
   each section with its pins, in Tana's order; a click opens the pin in that page (`goto`), and the pin of the page on
-  screen is marked. A right-click on a pin shows the Mac's own menu with **Remove pin**, which unpins it from the sidebar
-  (`window.shell.pinMenu` → main/pins.js `pins:menu`, greyed in demo mode). A section's heading folds it and shows its count while folded (kept on this machine,
+  screen is marked. A right-click on a row shows the Mac's own menu (main/state.js `popupMenu`): **Open in New Tab**, **Open in New Pane** and
+  **Open in Floating Pane** (answered to the shell, which opens the row's place there, as the ⌘-, ⇧- and ⌥-click do; shell.js `sbMenu`),
+  on Timeline, Today, the agent chats and the pins; a pin's adds **Remove pin**, which unpins it from the sidebar (`pins:menu`,
+  greyed in demo mode), an agent chat's **Delete chat** (`agentChat:menu`, not on another Mac's). A section's heading folds it and shows its count while folded (kept on this machine,
   `windowSidebarFolded`); a section with nothing in it is not drawn, and with no pins at all one line says how to add one.
   Titles are masked in demo mode (renderer/segments.js `demoText`) and a sensitive pin is blurred until the header's
   eye shows sensitive items.
+- Then **Agent chats** (docs/CHATS.md §13), a section folded and counted like the others (`agentChats`): your newest eight
+  chats with Codex, each opening its chat in that page and marked while it is on screen, then **All agent chats** when there
+  are more (Cmd+K Agent chats); with none yet, **New chat with ChatGPT**. Read from `window.shell.agentChats()` (main/agentchats.js
+  `list`) when the window loads and whenever main says `agentChat:changed` for the list. Titles are masked in demo mode.
 - **Where it comes from**: `window.shell.pins()` → main/pins.js `pinTree` (each pin with its node and `sensitive`), read
   when the window loads, on a sign-in, and whenever main says `pins:changed`: main watches the collection, the profile
   and every pinned document once read (`watchSidebar`), here or in Tana, and tells every window's shell a beat later

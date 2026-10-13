@@ -174,6 +174,7 @@ async function searchList() {
 // so it cannot reach sdk/query — and main already owns the canonical filter anyway (viewFilter merges the preset
 // with whatever the user changed). The renderer therefore sends a view id, never a query it built itself.
 const SEARCH_NAME = { inbox: 'Inbox', library: 'Library' };
+const STATE_NAME = { proposed: 'Inbox', open: 'In Progress', waiting: 'Waiting', closed: 'Completed', not_now: 'Later' }; // renderer/views.js STATES
 // A name from what the filter actually says, so a saved search does not arrive called "Untitled". Tana names its
 // own searches for the intent rather than the mechanism; this is the closest main can get without the pill labels,
 // which live in the renderer.
@@ -181,7 +182,7 @@ function searchTitle(id, filter) {
   const base = SEARCH_NAME[id] || 'Search';
   const bits = [];
   if (filter.text && filter.text.trim()) bits.push('"' + filter.text.trim() + '"');
-  if (Array.isArray(filter.states) && filter.states.length) bits.push(filter.states.join(', '));
+  if (Array.isArray(filter.states) && filter.states.length) bits.push(filter.states.map((s) => STATE_NAME[s] || s).join(', ')); // as the status pill names them
   if (filter.assignee === 'me') bits.push('mine');
   else if (filter.assignee === 'unassigned') bits.push('unassigned');
   return bits.length ? base + ' — ' + bits.join(' · ') : base;
@@ -193,7 +194,7 @@ async function searchCreate(id, title) {
   const name = typeof title === 'string' && title.trim() ? title.trim() : searchTitle(id, filter);
   return createDocument(name, { kind: 'search', query, view: { completedWithin: filter.completedWithin, audience: filter.audience, limit: filter.limit } });
 }
-// My Tasks, the right half of the Work View (renderer/timeline.js): the search the synced setting 'myTasks' names, so a
+// My Tasks, the right half of the Default View (renderer/timeline.js): the search the synced setting 'myTasks' names, so a
 // rename in Tana keeps it and two machines share it; without one, your own saved search of that name (the oldest, so
 // two machines that made one at once settle on the same); else one made from the My Tasks preset (VIEW_PRESETS.library)
 // and shown the way the Library shows it. The one made here is also remembered for the session and its client (another

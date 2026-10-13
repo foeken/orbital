@@ -42,8 +42,8 @@ const NODES_DRAG_TYPE = 'application/x-orbital-nodes';
 function dragSegs(item) {
   const keys = sel && sel.keys.has(item.key) ? selKeys() : [item.key];
   return keys.map((key) => items.get(key).node).map((n) => {
-    const uri = n.kind === 'document' && isRealId(n.id) ? n.id : n.reference?.uri;
-    if (uri) return [{ mention: { uri, label: (n.kind === 'document' ? n.text : referenceLabel(n)) || uri } }];
+    const uri = n.kind === 'document' && isRealId(n.id) ? n.id : n.reference?.uri || n.timeline?.uri; // a Timeline line: the node it is about
+    if (uri) return [{ mention: { uri, label: (n.kind === 'document' ? n.text : n.timeline ? (n.segments || []).find((s) => s.content)?.text : referenceLabel(n)) || uri } }];
     return segsOf(n).map((s) => ('text' in s ? { text: s.text } : { mention: { uri: s.mention.uri, label: s.mention.label } })); // the composer is plain text: marks stay behind
   }).filter((segs) => segs.length);
 }
@@ -214,7 +214,7 @@ function groupDropWrites(target, t, me, today) {
   return [...clear, ...(assigned && t.assignees.length === 1 ? [] : [['assign', [me]]]), ...(t.stateType === state ? [] : [['state', state]]), ...(t.watched && !assigned ? [['watch', null]] : [])];
 }
 const GROUP_WRITES = {
-  agent: (id) => tana.setAgent(id, false), // the task stays; its link goes, as ⌘K Unassign from Agent does
+  agent: (id) => tana.setAgent(id, false), // the task stays; its link goes, as ⌘K Unassign does
   pin: (id, date) => tana.pin(id, 'today', date),
   unpin: (id, date) => tana.unpin(id, 'today', date),
   assign: (id, uris) => tana.setAssignees(id, uris),
@@ -256,7 +256,7 @@ function dropOnGroup(task, target) {
     if (!task.writable && writes.some(([op]) => op === 'assign' || op === 'state')) throw new Error('This task is read-only: it can\u2019t go under ' + target);
     if (writes.some(([op, on]) => op === 'agent' && on)) return openAgentPrompt(task); // it needs a prompt: nothing is written until it is sent
     for (const [op, arg] of writes) await GROUP_WRITES[op](task.id, arg);
-    if (writes.some(([op]) => op === 'agent')) { agentIds.delete(task.id); agentStates.delete(task.id); patchAgent(task.id); }
+    if (writes.some(([op]) => op === 'agent')) forgetAgent(task.id);
     try { taskMetaById.set(task.id, await tana.taskMeta(task.id)); } catch { taskMetaById.delete(task.id); }
     notifyById.delete(task.id);
     if (held) held.groups.delete(task.id); // a row held in place by an earlier click would stay put: this one is meant to move

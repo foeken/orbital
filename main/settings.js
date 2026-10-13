@@ -21,7 +21,7 @@ const content = require('../sdk/content');
 const { deterministicId } = require('../sdk/chat');
 const { initDocument, readNode, ulid } = require('../sdk/node');
 const { audienceOf } = require('../sdk/access');
-const { S, isDeleted, report, send } = require('./state');
+const { S, isDeleted, report, send, toShells } = require('./state');
 
 const TITLE = 'Orbital'; // how a machine that has never seen the document finds it
 const OLD_TITLE = 'Tana Companion'; // what it was called before the rename: a workspace whose node was never renamed by hand is still found, rather than given a second document
@@ -40,8 +40,9 @@ const MARK = 'ext:orbital:doc'; // written at creation, so a document that holds
 // the Mac's and the iPhone's Settings alike (ios/engine/index.js aiChoice): a choice about your own content, so it follows
 // you, while the key that pays for it stays put. Unset means the defaults in main/ai.js.
 const AI_KEYS = { model: 'aiModel', effort: 'aiEffort', quickModel: 'aiQuickModel', quickEffort: 'aiQuickEffort' };
-// myTasks is which saved search the Work View's right half is (main/views.js myTasks), by id so a rename keeps it.
-const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^agents$/, /^defaultAgent$/, /^codexPrompt$/, /^codexTask$/, /^sensitive$/, /^ai(Quick)?(Model|Effort)$/, /^myTasks$/, /^relay(Key|KeyNext|Seen)$/, /^pref:/];
+// dotChat and defaultAgent are retired: synced only so that clearing them (main/agents/index.js tidy) clears the document too.
+// myTasks is which saved search the Default View's right half is (main/views.js myTasks), by id so a rename keeps it.
+const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^agents$/, /^codexPrompt$/, /^codexTask$/, /^agentChats$/, /^sensitive$/, /^ai(Quick)?(Model|Effort)$/, /^myTasks$/, /^relay(Key|KeyNext|Seen)$/, /^pref:/, /^(dotChat|defaultAgent)$/];
 const isSynced = (key) => SYNCED.some((rule) => rule.test(key));
 
 let cache = null; // key -> value, the answer every read gets
@@ -235,6 +236,8 @@ async function hydrate() {
   if (missing.length && S.settingsReadOnly) for (const key of missing) { delete cache[key]; db.setSetting(key, undefined); changed.push(key); }
   else if (missing.length) doc.transact((loro) => { const map = loro.getMap(ROOT); for (const key of missing) map.set(key, encode(cache[key])); });
   if (changed.length) send('settings:changed', prefs());
+  // your agent chats, moved on another Mac: the pages and each window's sidebar read the list again (main/agentchats.js tellList)
+  if (changed.includes('agentChats')) { send('agentChat:changed', 'orbital:agent-chats'); toShells('agentChat:changed', 'orbital:agent-chats'); }
   return changed.length > 0;
 }
 // A document an older build wrote keeps its keys in the old root: move them across once, the new root winning where

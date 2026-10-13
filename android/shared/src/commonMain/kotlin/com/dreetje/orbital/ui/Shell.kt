@@ -334,7 +334,7 @@ fun Shell(engine: Engine, start: Start = Start()) {
         }
     }
 
-    if (settings) SettingsSheet(engine) { settings = false }
+    if (settings) SettingsSheet(engine, start.connect) { settings = false }
     if (adding) QuickAdd(engine, search = if (path.isEmpty()) (page as? Menu.Search)?.id else null) { adding = false } // on a saved search: a row of it
     engine.shared?.let { s -> QuickAdd(engine, shared = s) { engine.shared = null } }
     engine.assigning?.let { a -> AssignSheet(engine, a) { engine.assigning = null } }

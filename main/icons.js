@@ -56,6 +56,12 @@ function stored() {
   return chosen;
 }
 const forgetTypeIcons = () => { chosen = null; }; // the settings row changed under us (a restore, a test)
+// a thing that is gone (a deleted agent chat): its choice goes with it, rather than sitting in the synced setting for good
+function dropTypeIcon(uri) {
+  const next = { ...stored() };
+  if (!Object.hasOwn(next, uri)) return;
+  delete next[uri]; settings.set('typeIcons', next); chosen = next;
+}
 const typeIconName = (typeUri) => { const label = typeUri && stored()[typeUri]; return label ? iconName(label) : null; };
 // The glyphs the renderer has to know about right now: one per type that has been given an icon. Sent with the
 // roots, so a row is never drawn before the glyph it names exists (renderer/nodes.js loadRoots).
@@ -65,9 +71,10 @@ const typeIcons = () => Object.entries(stored())
 // Choosing one: a label from the set, or null to go back to the generic type glyph. Stored under the type, so every
 // document of that type follows it. The generic glyph is kept as a null entry rather than no entry: it is a choice
 // too, and fillTypeIcons only picks for types nobody has chosen for.
-// A document (tana:text:) can take one of its own too, which it wears instead of its type's (main/rows.js plainRow).
+// A document (tana:text:) can take one of its own too, which it wears instead of its type's (main/rows.js plainRow), and
+// so can an agent chat (main/agentchats.js list), on its page, the list and the sidebar.
 function setTypeIcon(typeUri, name) {
-  if (typeof typeUri !== 'string' || !/^tana:(type:[0-9a-z]{26}(\?attribute=[0-9a-z]{8})?|(search|text):[0-9a-z]{26})$/.test(typeUri)) throw new Error('Icons are set on a type, a field, a saved search or a document');
+  if (typeof typeUri !== 'string' || !/^(tana:(type:[0-9a-z]{26}(\?attribute=[0-9a-z]{8})?|(search|text):[0-9a-z]{26})|orbital:agent-chat:[0-9a-f-]{36})$/.test(typeUri)) throw new Error('Icons are set on a type, a field, a saved search, a document or an agent chat');
   const next = { ...stored() };
   if (name == null) next[typeUri] = null;
   else {
@@ -103,4 +110,4 @@ const ipc = {
   'icons:types': () => typeIcons(),
 };
 
-module.exports = { searchIcons, typeIcons, typeIconName, setTypeIcon, fillTypeIcons, iconName, labelOf, svgOf, forgetTypeIcons, ipc };
+module.exports = { searchIcons, typeIcons, typeIconName, setTypeIcon, fillTypeIcons, iconName, labelOf, svgOf, forgetTypeIcons, dropTypeIcon, ipc };

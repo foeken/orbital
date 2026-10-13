@@ -518,7 +518,7 @@ let savedPlace = readStoredPlace();
 // asking Tana for a node by an id that was only ever the app's
 if (savedPlace?.docId === 'orbital:settings') savedPlace = null;
 forgetRecent('orbital:settings');
-// Nothing stored for this half: a first launch, which opens on the Work View (renderer/timeline.js) — the Timeline
+// Nothing stored for this half: a first launch, which opens on the Default View (renderer/timeline.js) — the Timeline
 // here, and My Tasks in the pane main opens beside it. Every later render stores a place, so from then on a
 // launch reopens the last one. My Tasks has no id until main has found or made it, so that half asks once connected
 // (restorePlace). The Timeline's id is written out: renderer/timeline.js, which declares it, loads after this file.
@@ -562,7 +562,7 @@ async function restorePlace() {
     if (navPlace().key !== before) return; // you navigated while it loaded: you stay where you went
   }
   zoom = { docId: saved.docId, nodeId: saved.nodeId || null, from: saved.from };
-  // a saved search reopened here is listed in Cmd+K at once: one the other half has just made (the Work View's My
+  // a saved search reopened here is listed in Cmd+K at once: one the other half has just made (the Default View's My
   // Tasks) is not in the graph's answer yet
   if (/^tana:search:/.test(saved.docId)) addSearch({ ...extra.get(saved.docId), id: saved.docId });
   if (saved.edit === true) { caretOnOpen = true; caretOwed = saved.docId; } // a page opened on a new note (New tab, New pane, New floating pane, #756): the caret waits in its first row
