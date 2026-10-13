@@ -392,6 +392,7 @@ function mockApi() {
     deleted.delete(docId); emit(null);
   }
   return {
+    platform: typeof location !== 'undefined' && /[?&]platform=linux\b/.test(location.search) ? 'linux' : 'darwin',
     roots: async () => structuredClone(views),
     viewFilter: async (id) => structuredClone(filters[id]),
     setViewFilter: async (id, filter) => structuredClone(filters[id] = filter),

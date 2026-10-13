@@ -21,6 +21,7 @@ module.exports = [
   { name: 'keys-panes', video: true, panes: 2, size: '1440x900', setup: [{ js: "goTo('mockdoc2')", page: '2' }, { wait: 900 }], steps: [
     { key: '⌘/' }, { wait: 900 }, { key: '⌥⌘↓' }, { wait: 1500 }, { key: '⌥⌘↓' }, { wait: 1300 },
   ] },
+  { name: 'keys-page', url: 'manual/keys.html', full: true, size: '1440x900' },
 ];
 
 

@@ -16,10 +16,11 @@ thing from a browser tab, and because the round trip through a web view makes a 
 | Platform | Where | Built with | Status |
 |----------|-------|------------|--------|
 | Mac | the repository root | Electron, plain JavaScript | Released; signed, notarized and updating itself (Apple Silicon) |
+| Linux | the repository root | Electron, plain JavaScript | Source builds; native window controls and Ctrl shortcuts |
 | iPhone | [`ios/`](ios/README.md) | SwiftUI | Beta in TestFlight: [join it](https://testflight.apple.com/join/wgcnRVKx) on iOS 26 or later |
 | Android | `android/` | Kotlin Multiplatform, Jetpack Compose | A signed APK with each release, installed by download on Android 10 or later; not on Google Play |
 
-There is no iPad, Windows, Linux or web version.
+There is no iPad, Windows or web version.
 
 ![The Timeline: what others changed in the nodes you watch, day by day](docs/images/timeline.png)
 
@@ -130,6 +131,32 @@ Local state lives in `~/Library/Application Support/Orbital`: the SQLite row cac
 the sync peer identity and the login partition. Deleting that folder resets the app without touching
 anything in Tana. An install from before the rename keeps its data: the older `tana-tasks` folder is
 moved to the new name the first time the app or the CLI starts (`userdata.js`).
+
+### Linux
+
+Node 22.5 or later and a graphical Linux desktop. Tested on Ubuntu 24.04, x86-64, with X11.
+
+```sh
+npm install
+npm start
+npm run package:linux          # dist/Orbital-linux-<arch>/Orbital
+node scripts/install-linux.js # install for this user, after packaging
+```
+
+With pnpm, use `pnpm install --node-linker=hoisted`, `pnpm run postinstall`, and `pnpm start`.
+The hoisted layout matches the dependency layout the existing checks and Electron packager expect.
+`pnpm run install:linux` builds and installs in one step.
+
+The installer puts the app in `${XDG_DATA_HOME:-~/.local/share}/orbital`, adds an **Orbital** launcher
+in your desktop's app menu and `~/.local/bin/orbital`, and registers `orbital:` links. It needs no sudo.
+Close Orbital before rebuilding and reinstalling it. The login, cache and settings stay in
+`${XDG_CONFIG_HOME:-~/.config}/Orbital` across installs.
+
+Use **Ctrl** wherever the Mac uses **Cmd**, including Ctrl+K for the command palette, Ctrl+S for
+search, Ctrl+F for filtering, and Ctrl+click for selecting more rows. **New Window** is
+Ctrl+Alt+Shift+N, **Show/Hide sidebar** is Ctrl+Shift+S, and **Today** is Ctrl+Shift+D. Closing the
+last window quits the app. Linux updates are manual: pull the latest source, rebuild and reinstall.
+The macOS updater never downloads or installs an Apple bundle on Linux.
 
 ### iPhone
 

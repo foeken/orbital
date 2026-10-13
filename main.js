@@ -5,6 +5,7 @@
 // modules without a window.
 const { app, BaseWindow, BrowserWindow, Menu, Notification, WebContentsView, clipboard, ipcMain, nativeTheme, screen, shell } = require('electron');
 const path = require('node:path');
+const MAC = process.platform === 'darwin';
 const db = require('./db');
 const { createTanaSession } = require('./tana-session');
 const { userDataDir } = require('./userdata');
@@ -249,7 +250,7 @@ function openSettings() {
   if (S.settings && !S.settings.isDestroyed()) return S.settings.focus();
   const theme = settings.prefs().theme, dark = theme === 'dark' || (theme !== 'light' && systemTheme() === 'dark');
   const win = new BrowserWindow({ width: SETTINGS_WIDTH, height: 400, useContentSize: true, show: false, resizable: false, minimizable: false, maximizable: false, fullscreenable: false,
-    title: 'Settings', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 13 }, // centred on the title's 38px line (settings.css #title)
+    title: 'Settings', ...(MAC ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 13 } } : {}), // centred on the title's 38px line (settings.css #title)
     backgroundColor: dark ? '#262628' : '#f6f6f6', webPreferences: { preload: PRELOAD } }); // settings.css --bg
   S.settings = win;
   keepHome(win.webContents);
@@ -268,7 +269,7 @@ function createWindow() {
   const bounds = front && !front.isDestroyed() ? { ...front.getNormalBounds(), x: front.getNormalBounds().x + 24, y: front.getNormalBounds().y + 24 } : restoredBounds(saved, screen.getAllDisplays().map((d) => d.workArea));
   // in the theme the pages drew in last (window:theme), so a dark window does not open light and flash until a page says so
   const theme = Object.hasOwn(BACKGROUND, db.setting('windowTheme')) ? db.setting('windowTheme') : systemTheme();
-  const win = new BaseWindow({ ...bounds, title: 'Orbital', titleBarStyle: 'hiddenInset', backgroundColor: BACKGROUND[theme] });
+  const win = new BaseWindow({ ...bounds, title: 'Orbital', ...(MAC ? { titleBarStyle: 'hiddenInset' } : { icon: path.join(__dirname, 'build', 'icon.png') }), backgroundColor: BACKGROUND[theme] });
   win.theme = theme; // what the shell starts in (shell:state), until a page says again
   // saved shortly after a move or resize settles, and once more on close, so a quit or an update relaunch keeps it
   let boundsTimer = null;
@@ -338,7 +339,7 @@ function createMenu() {
       { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
       { type: 'separator' }, { role: 'quit' },
     ] },
-    { label: 'File', submenu: [{ label: 'New Window', accelerator: 'Ctrl+Cmd+N', registerAccelerator: false, click: () => createWindow() }, { type: 'separator' }, { label: 'Close', accelerator: 'CmdOrCtrl+W', click: () => closeFront(BaseWindow.getFocusedWindow()) }] },
+    { label: 'File', submenu: [{ label: 'New Window', accelerator: MAC ? 'Ctrl+Cmd+N' : 'Ctrl+Alt+Shift+N', registerAccelerator: false, click: () => createWindow() }, { type: 'separator' }, { label: 'Close', accelerator: 'CmdOrCtrl+W', click: () => closeFront(BaseWindow.getFocusedWindow()) }] },
     { role: 'editMenu' },
     { role: 'windowMenu' },
   ]));
@@ -628,13 +629,22 @@ if (process.env.TANA_MAIN_TEST) {
   // The About panel reads the bundle's plist, which in a dev run is Electron's own name and version; say it here instead.
   // The icon is named only for a dev run: the packaged app leaves build/icon.png out (package.json --ignore) and
   // carries its own, so naming that path there would point at a file the bundle does not have.
-  app.setAboutPanelOptions({ applicationName: 'Orbital', applicationVersion: app.getVersion(), version: '', ...(app.isPackaged ? {} : { iconPath: path.join(__dirname, 'build', 'icon.png') }) });
+  app.setAboutPanelOptions({ applicationName: 'Orbital', applicationVersion: app.getVersion(), version: '', ...(app.isPackaged && MAC ? {} : { iconPath: path.join(__dirname, 'build', 'icon.png') }) });
   // Before 'ready': the same session, cache and settings mirror for dev runs, the CLI and the packaged app. The
   // folder is named after the app, so an install still carrying the old name is moved here once (userdata.js).
   app.setPath('userData', userDataDir(app.getPath('appData'), { migrate: true }));
 
   // heard before 'ready': the link that launched the app comes before it (heardLink, above)
   app.on('open-url', (e, url) => { e.preventDefault(); heardLink(url); });
+  if (!MAC) {
+    if (!app.requestSingleInstanceLock()) app.quit();
+    for (const arg of process.argv) heardLink(arg);
+    app.on('second-instance', (_e, argv) => {
+      for (const arg of argv) heardLink(arg);
+      const win = S.win;
+      if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+    });
+  }
   if (app.isPackaged) app.setAsDefaultProtocolClient('orbital'); // a dev run would take the links from the installed app
 
   app.whenReady().then(async () => {
@@ -707,6 +717,6 @@ if (process.env.TANA_MAIN_TEST) {
     setInterval(() => checkUpdates(), 24 * 60 * 60 * 1000);
   });
 
-  app.on('window-all-closed', () => {}); // stay in the Dock (activate above)
+  app.on('window-all-closed', () => { if (!MAC) app.quit(); }); // stay in the Dock (activate above)
   app.on('before-quit', () => { if (S.client) S.client.close().catch(() => {}); agents.stop(); ai.stop(); }); // no writer outlives the app that spawned it
 }

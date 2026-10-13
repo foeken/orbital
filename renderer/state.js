@@ -81,6 +81,11 @@ const hotkeys = { ...pref('hotkeys', {}) }; // palette row id -> combo ("⇧⌘M
 // and brackets and \ with ⇧ or ⌥; while there are panes they are taken before a row sees them (renderer/palette.js).
 // Close pane has no key of its own: ⌘W closes the pane in front (the File menu).
 const DEFAULT_HOTKEYS = { openSettings: '⌘,', createTask: '⇧⌘Space', search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R', newWindow: '⌃⌘N', newTab: '⌘N', splitView: '⇧⌘N', floatPane: '⌥⌘N', otherPane: '⌘/', previousPane: '⇧⌘/', maximizePane: '⌥⌘↓', overview: '⌥⌘↑', zoomBack: '⌥⌘[', zoomForward: '⌥⌘]', nextTab: '⇧⌘]', previousTab: '⇧⌘[', goHome: '⇧⌘H', toggleSidebar: '⌃⌘S' }; // "Focus graph" and "Show/Hide graph" are palette rows with no default key
+if (tana.platform === 'linux') Object.assign(DEFAULT_HOTKEYS, { newWindow: '⌥⇧⌘N', toggleSidebar: '⇧⌘S', today: '⇧⌘D' });
+function keyLabel(key) {
+  if (typeof tana === 'undefined' || tana.platform !== 'linux') return key;
+  return (/[⌃⌘]/.test(key) ? 'Ctrl+' : '') + (key.includes('⌥') ? 'Alt+' : '') + (key.includes('⇧') ? 'Shift+' : '') + key.replace(/[⌃⌥⇧⌘]/g, '');
+}
 const NOTE_PAGES = new Set(['newTab', 'splitView', 'floatPane']); // the rows whose page opens on a new note (#756): their key, held, makes one
 const hotkeyFor = (id) => (Object.hasOwn(hotkeys, id) ? hotkeys[id] : DEFAULT_HOTKEYS[id]);
 // A header button's tooltip: what it does and, when it has one, the key that does the same. The label and row id stay
@@ -88,7 +93,7 @@ const hotkeyFor = (id) => (Object.hasOwn(hotkeys, id) ? hotkeys[id] : DEFAULT_HO
 function keyTitle(el, label, id) {
   el.dataset.label = label; el.dataset.hotkey = id;
   const key = hotkeyFor(id);
-  el.title = key ? label + ' ' + key : label;
+  el.title = key ? label + ' ' + keyLabel(key) : label;
 }
 const hotkeyIds = () => [...new Set([...Object.keys(DEFAULT_HOTKEYS), ...Object.keys(hotkeys)])];
 let pinInfo = null;          // { docId, sidebar, dates } of the palette's document (api.pinState)

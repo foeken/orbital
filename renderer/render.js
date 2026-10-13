@@ -968,15 +968,15 @@ function nodeEl(node, docId, parent) {
   // A click that misses the words still belongs to the row, and the row is bigger than its text: the padding
   // around it, and the blank line a soft break leaves inside it, are all places a caret can sit. It used to answer
   // with the end of the row, which walked the caret past everything written after the point that was clicked.
-  line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !reference && !fullref && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, caretAt(text, e.clientX, e.clientY)); };
-  if (node.notification) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !onRowBlank(e) && !e.target.closest('.bullet, .chev')) openNotification(node); }; // a click on it opens it, as in Tana
+  line.onclick = (e) => { if (!e.metaKey && !(tana.platform === 'linux' && e.ctrlKey) && !e.shiftKey && !reference && !fullref && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, caretAt(text, e.clientX, e.clientY)); };
+  if (node.notification) line.onclick = (e) => { if (!e.metaKey && !(tana.platform === 'linux' && e.ctrlKey) && !e.shiftKey && !onRowBlank(e) && !e.target.closest('.bullet, .chev')) openNotification(node); }; // a click on it opens it, as in Tana
   // and a Timeline row opens the node it is about; ⌘ as a tab, ⌥ floating (renderer/palette.js elsewhere; ⇧ selects)
   if (node.timeline?.uri) line.onclick = (e) => { if (!e.shiftKey && !onRowBlank(e) && !e.target.closest('.chev')) openTimeline(node, elsewhere(e)); };
   else if (node.timeline) line.onmousedown = (e) => e.preventDefault(); // one about nothing (an "added to your Inbox" line) takes no click and no caret
   // as does a task listed under one, as itself: goTo reads the real node, where zoomTo would open the read-only copy the
   // Timeline lists, filed under the Timeline in the crumb — a page that looked like the task and could not be edited
   else if (parent?.node?.timeline) line.onclick = (e) => { if (!e.shiftKey && !onRowBlank(e) && !e.target.closest('.chev, .check, .bullet')) { const where = elsewhere(e); if (where) run(() => openElsewhere(where, node.id)); else goTo(node.id); } };
-  else if (clickOpens) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !onRowBlank(e) && !e.target.closest('.chev, .bullet, .check')) { if (e.altKey) run(() => openElsewhere(elsewhere(e), item.docId, item.node.kind === 'document' ? null : item.node.id)); else zoomTo(item); } }; // .check: a task's box in a table row ticks it and stays; ⌥: floating (⌘- and ⇧-click select the row)
+  else if (clickOpens) line.onclick = (e) => { if (!e.metaKey && !(tana.platform === 'linux' && e.ctrlKey) && !e.shiftKey && !onRowBlank(e) && !e.target.closest('.chev, .bullet, .check')) { if (e.altKey) run(() => openElsewhere(elsewhere(e), item.docId, item.node.kind === 'document' ? null : item.node.id)); else zoomTo(item); } }; // .check: a task's box in a table row ticks it and stays; ⌥: floating (⌘- and ⇧-click select the row)
   // a click on it opens something: the pointer (styles.css) and ⌘K Open node (renderer/tasks.js openNodeRow) follow the class
   if (clickOpens || node.notification || node.timeline?.uri || (!node.timeline && parent?.node?.timeline)) el.classList.add('opens');
   // a reference row: the bullet opens the target, a click selects the row, and a click on the selected row starts

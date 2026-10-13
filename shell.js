@@ -8,6 +8,10 @@ import { createWorkspace, createDocument, layout as L, DEFAULT_KEYMAP } from './
 
 const bridge = window.shell || { state: () => ({ doc: null }), onCommand() {}, layout() {} }; // shell.html opened on its own
 const start = bridge.state();
+if (bridge.platform === 'linux') {
+  document.getElementById('headPalette').title = 'Command palette Ctrl+K';
+  document.getElementById('sbEdge').title = 'Drag to resize, or narrower for icons only · Ctrl+Shift+S';
+}
 let theme = start.theme === 'dark' ? 'dark' : 'light', covering = null, last = '', many = null;
 // The sidebar's own state, kept on this machine as the pages keep the width they were dragged to (renderer/prefs.js):
 // whether it is open or its icons alone, its width, and the sections folded. Up here because tell() reads it from the load on.
@@ -349,7 +353,7 @@ function sbButton(cls, icon, words, run, uri, svg) {
 function sbDraw() {
   const rows = [];
   const search = sbButton('sbrow', 'search', 'Search', () => toPage({ orbital: 'palette', mode: 'search' }));
-  if (searchKey) { const k = document.createElement('kbd'); k.textContent = searchKey; search.append(k); }
+  if (searchKey) { const k = document.createElement('kbd'); k.textContent = bridge.platform === 'linux' ? (/[⌃⌘]/.test(searchKey) ? 'Ctrl+' : '') + (searchKey.includes('⌥') ? 'Alt+' : '') + (searchKey.includes('⇧') ? 'Shift+' : '') + searchKey.replace(/[⌃⌥⇧⌘]/g, '') : searchKey; search.append(k); }
   rows.push(search, sbButton('sbrow', 'home', 'Home', () => toPage({ orbital: 'action', id: 'goHome' })), sbButton('sbrow', 'today', 'Today', () => toPage({ orbital: 'action', id: 'today' })));
   const pin = (n) => {
     const b = sbButton('sbrow', n.node.icon, demoText(n.node.title || 'Untitled', n.uri), () => toPage({ orbital: 'goto', id: n.uri }), n.uri, n.node.svg);

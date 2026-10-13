@@ -43,6 +43,7 @@ const ATOMIC_SRC = source.match(/const isImage = [^\n]*\nconst isDivider = [^\n]
 const RENDER_SHIM = 'globalThis.renderSoon ??= (...a) => render(...a); globalThis.patchMeta ??= () => render(); globalThis.iconNode ??= () => null;\n'
   + 'globalThis.addIcon ??= ' + source.match(/^function addIcon\(.*$/m)[0] + ';\n' // the real one, over whichever iconNode the harness has
   + `globalThis.DEFAULT_HOTKEYS ??= ${DEFAULT_HOTKEYS_SRC}; globalThis.hk ??= () => (typeof hotkeys === 'object' ? hotkeys : {}); globalThis.hotkeyFor ??= (id) => (Object.hasOwn(hk(), id) ? hk()[id] : DEFAULT_HOTKEYS[id]); globalThis.hotkeyIds ??= () => [...new Set([...Object.keys(DEFAULT_HOTKEYS), ...Object.keys(hk())])]; globalThis.comboOf ??= () => '';\n`
+  + 'globalThis.keyLabel ??= ' + source.match(/^function keyLabel\(.*?^\}/ms)[0] + ';\n'
   + 'globalThis.keyTitle ??= ' + source.match(/^function keyTitle\(.*?^\}/ms)[0] + ';\n'; // the real one: a header button's tooltip names its key
 const withShims = (src) => {
   // Row listeners are bound to both roots the app has (the outline and the fields under the title, which are

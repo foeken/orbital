@@ -33,6 +33,10 @@ function showStatus(s) {
   statusError = state.error;
   render(); // auth/connection state drives the skeleton; a newly visible outline applies the view's opening scroll
 }
+if (tana.platform === 'linux') {
+  $('loginCmd').textContent = 'Ctrl';
+  for (const el of document.querySelectorAll('#loginBox kbd, #paletteKeyHint kbd')) el.textContent = keyLabel(el.textContent);
+}
 $('login').onclick = () => tana.login().catch(showError);
 $('errorLogin').onclick = () => tana.login().catch(showError);
 // Signed out, the splash's big ⌘ and K keycaps go down under the keys you hold, so pressing them feels like the lesson.
@@ -40,8 +44,8 @@ $('errorLogin').onclick = () => tana.login().catch(showError);
 // held on macOS, so K comes up with ⌘ (or when the window loses focus).
 function loginKeys(e) {
   if ($('loginBox').hidden) return;
-  $('loginCmd').classList.toggle('down', !!e.metaKey);
-  $('loginK').classList.toggle('down', !!e.metaKey && e.type === 'keydown' && e.key.toLowerCase() === 'k');
+  $('loginCmd').classList.toggle('down', !!(e.metaKey || (tana.platform === 'linux' && e.ctrlKey)));
+  $('loginK').classList.toggle('down', !!(e.metaKey || (tana.platform === 'linux' && e.ctrlKey)) && e.type === 'keydown' && e.key.toLowerCase() === 'k');
 }
 document.addEventListener('keydown', loginKeys, true);
 document.addEventListener('keyup', loginKeys, true);

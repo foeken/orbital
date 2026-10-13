@@ -1217,7 +1217,7 @@ function renderPalette() {
     row.append(icon, label);
     if (r.badge) { const b = document.createElement('span'); b.className = 'badge'; b.textContent = r.badge; row.append(b); } // a word right after the label, like "Admin only"
     if (r.right) { const s = document.createElement('span'); s.className = 'ricon right'; row.append(addIcon(s, r.right)); }
-    if (r.kbd) { const k = document.createElement('kbd'); k.textContent = r.kbd; row.append(k); }
+    if (r.kbd) { const k = document.createElement('kbd'); k.textContent = keyLabel(r.kbd); row.append(k); }
     if (r.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = demoMeta(r.node, r.hint); blurSensitive(h, r.node && r.node.id); row.append(h); }
     row.onmousedown = (e) => e.preventDefault();
     row.onclick = (e) => openRow(r, elsewhere(e)); // ⌘/⇧/⌥-click opens it where ⌘↩/⇧↩/⌥↩ would
@@ -1460,7 +1460,8 @@ const KEYNAMES = { Enter: '↩', Backspace: '⌫', Tab: '⇥', ArrowUp: '↑', A
 const KEYCODES = { BracketLeft: '[', BracketRight: ']', Backslash: '\\', Slash: '/' };
 // "⌃⌥⇧⌘" + key ("M", "1", "↩"); modifiers alone while only they are pressed
 function comboOf(e) {
-  const mods = (e.ctrlKey ? '⌃' : '') + (e.altKey ? '⌥' : '') + (e.shiftKey ? '⇧' : '') + (e.metaKey ? '⌘' : '');
+  const linux = typeof tana !== 'undefined' && tana.platform === 'linux';
+  const mods = (e.ctrlKey && !linux ? '⌃' : '') + (e.altKey ? '⌥' : '') + (e.shiftKey ? '⇧' : '') + (e.metaKey || (linux && e.ctrlKey) ? '⌘' : '');
   if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return mods;
   return mods + (/^(Key|Digit)/.test(e.code) ? e.code.slice(-1) : KEYCODES[e.code] || KEYNAMES[e.key] || (e.key.length === 1 ? e.key.toUpperCase() : e.key));
 }
@@ -1473,19 +1474,19 @@ const RESERVED = { '⌘K': 'opens the command palette', '⇧⌘K': 'records a sh
 // Why a combo cannot be saved for this row, or '' when it can: the app owns it, or another row already has it.
 function comboTaken(combo, rowId) {
   const built = RESERVED[combo.replace(/[⌃⌥⌘]/g, '').replace(/^(⇧?)/, '$1⌘')];
-  if (built) return combo + ' already ' + built;
+  if (built) return keyLabel(combo) + ' already ' + built;
   const other = hotkeyIds().find((id) => hotkeyFor(id) === combo && id !== rowId);
   if (!other) return '';
   const row = paletteRows('').find((r) => r.id === other), node = other.startsWith('doc:') && views.flatMap((s) => s.nodes).find((n) => n.id === other.slice(4));
   const fold = row || node ? -1 : other.indexOf('>'), parent = fold > 0 && paletteRows('').find((r) => r.sub && (r.id || r.rank) === other.slice(0, fold));
   const folded = fold > 0 && (parent ? subBase(parent) + ' ' : '') + other.slice(fold + 1); // "status>Later" while it is folded away: "Set status to Later"
-  return combo + ' is already the shortcut for "' + (row ? row.label : node ? node.text : folded || other.replace(/([A-Z])/g, ' $1').toLowerCase()) + '"'; // a row absent right now (Complete without a task) by its id, spelled out
+  return keyLabel(combo) + ' is already the shortcut for "' + (row ? row.label : node ? node.text : folded || other.replace(/([A-Z])/g, ' $1').toLowerCase()) + '"'; // a row absent right now (Complete without a task) by its id, spelled out
 }
 const recorder = $('recorder');
 let rec = null; // { row, combo }
 function openRecorder(row) { rec = { row, combo: '' }; $('recTitle').textContent = row.label; recorder.hidden = false; showCombo(); }
 function showCombo() {
-  $('recKeys').replaceChildren(...(rec.combo.match(/[⌃⌥⇧⌘]|[^⌃⌥⇧⌘]+/g) || []).map((s) => { const k = document.createElement('span'); k.textContent = s; return k; }));
+  $('recKeys').replaceChildren(...(rec.combo.match(/[⌃⌥⇧⌘]|[^⌃⌥⇧⌘]+/g) || []).map((s) => { const k = document.createElement('span'); k.textContent = keyLabel(s).replace(/\+$/, ''); return k; }));
   const warn = validCombo(rec.combo) ? comboTaken(rec.combo, rec.row.id) : '';
   $('recWarn').textContent = warn; $('recWarn').hidden = !warn;
   $('recSave').disabled = !validCombo(rec.combo) || !!warn;

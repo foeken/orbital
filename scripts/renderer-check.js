@@ -497,7 +497,7 @@ const DEMO_SAFE = new Set([
   'setDemoMode', 'setMcpHidden', 'setOpenAIKey', 'setOpenAIRegion', 'setPref', 'setViewFilter', 'setWindowLayout', 'splitWindow',
   'status', 'suggestDiscussWith', 'suggestSensitive', 'summaryUri', 'systemTheme', 'taskMeta', 'taskTypes', 'timelinePages', 'todayNode',
   'translate', 'typeIcons', 'typeList', 'updateInfo', 'viewFilter', 'viewList', 'weekNode', 'windowLayout',
-  'windowTheme', 'zoom']);
+  'windowTheme', 'zoom', 'platform']);
 // Electron's own (windows, overlays, updates, PDF, the zoom), what only main can tell (settings, releases, presence
 // asks), and gaps the mock has not filled yet (indentMany, outdentMany, pasteMarkdown, archiveDocument, taskTypes):
 // fill one and take it off. The renderer guards each with `tana.x &&` or the flows (scripts/flow-check.js) fail.
@@ -532,7 +532,7 @@ async function preloadErrorsCheck() {
   };
   const window = { addEventListener() {} }; window.top = {};
   vm.runInNewContext('(function () {' + fs.readFileSync(require.resolve('../preload.js'), 'utf8') + '\n})()',
-    { require: () => electron, location: { protocol: 'file:', pathname: '/app/index.html' }, window, localStorage: { getItem: () => null, setItem() {}, removeItem() {} }, Promise, Error, TypeError });
+    { require: () => electron, process: { platform: 'darwin' }, location: { protocol: 'file:', pathname: '/app/index.html' }, window, localStorage: { getItem: () => null, setItem() {}, removeItem() {} }, Promise, Error, TypeError });
   const failed = (call) => call().then(() => null, (e) => e);
   assert.equal((await failed(() => exposed.api.roots())).message, 'Node has been deleted', 'a refusal reads as main said it');
   const other = await failed(() => exposed.api.status());

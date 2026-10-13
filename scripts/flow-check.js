@@ -1594,6 +1594,29 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
   for (const s of await sides()) assert.deepEqual(await p.jsIn(s, 'window.__errors'), [], 'page ' + s + ' reported errors');
 });
 
+flow('Linux: Ctrl shortcuts, visible key labels and additive row selection', async (p) => {
+  await p.start({ platform: 'linux' });
+  await command(p, 'library', 'Library');
+  await p.waitFor('viewOf()?.id === "library" && document.querySelectorAll("#outline .node .text").length >= 2', 'Library rows');
+  await p.key('⌃s');
+  assert.equal(await p.js('!palette.hidden && palMode === "search"'), true);
+  await p.key('esc');
+  await p.key('⌃f');
+  assert.equal(await p.js('filterShown && document.activeElement === filterEl'), true);
+  await p.key('esc');
+  await p.key('⌃k');
+  assert.equal(await p.js('[...document.querySelectorAll("#palette kbd")].some(k => k.textContent === "Ctrl+F")'), true);
+  await p.key('esc');
+  await command(p, 'library', 'Library');
+  await p.waitFor('viewOf()?.id === "library" && document.querySelectorAll("#outline .node .text").length >= 2', 'Library rows');
+  const selected = await p.js(`(() => {
+    const lines = [...document.querySelectorAll('#outline .node .text')].slice(0, 2);
+    for (const line of lines) line.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, ctrlKey: true, button: 0 }));
+    return selKeys().length;
+  })()`);
+  assert.equal(selected, 2, 'Ctrl+click adds the second row to the selection');
+});
+
 (async () => {
   if (process.env.CODEX_SANDBOX) { console.error('flow-check: the agent sandbox refuses the loopback port and Chromium this needs; run it escalated'); process.exit(3); }
   const chrome = findChrome();
@@ -1669,9 +1692,9 @@ flow('golden path: open pages in tabs and panes, each keeping its own place', as
     // a fresh page on the mock, signed in.
     // real: mock ids read as tana: ids (manual/scenes/kit.js REAL), for what only a real id draws (sensitive marks); the change
     // listeners registered at load keep the mock's own ids, so a flow that needs live changes leaves it off
-    const start = async ({ real = false } = {}) => {
+    const start = async ({ real = false, platform = 'darwin' } = {}) => {
       await send('Storage.clearDataForOrigin', { origin: base, storageTypes: 'local_storage' });
-      await send('Page.navigate', { url: base + '/index.html' });
+      await send('Page.navigate', { url: base + '/index.html?platform=' + platform });
       await waitFor('document.readyState === "complete" && typeof render === "function"', 'the page to load', 8000);
       if (real) await js(REAL);
       await js(HELPERS);
