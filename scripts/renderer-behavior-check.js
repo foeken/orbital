@@ -211,6 +211,8 @@ const withShims = (src) => {
   // the agents (renderer/state.js): Tana alone, the list a fresh install starts with
   if (/\b(agentList|agentsOn|agentNamed|agentPick)\b/.test(src) && !/let agentList\b/.test(src)) src = "globalThis.agentList ??= [{ id: 'tana', label: 'Tana', icon: 'tana', installed: true, enabled: true, opensHere: true }]; globalThis.agentPick ??= 'tana'; globalThis.agentsOn ??= () => globalThis.agentList.filter((a) => a.enabled && a.installed); globalThis.agentNamed ??= (id) => globalThis.agentList.find((a) => a.id === id) || null;\n" + src;
   if (/\bloadAgentList\(/.test(src) && !/function loadAgentList\(/.test(src)) src = 'globalThis.loadAgentList ??= () => Promise.resolve();\n' + src;
+  // the selected rows (renderer/select.js), for a slice that is not about a selection: none, the caret's node is the one
+  if (/\bselKeys\(/.test(src) && !/function selKeys\(|const selKeys =/.test(src)) src = 'globalThis.selKeys ??= () => [];\n' + src;
   // whether the latest release has the Android app (renderer/overlays.js): none yet, as for a page that has not heard back
   if (/\bandroidDownload\b/.test(src) && !/let androidDownload\b/.test(src)) src = 'globalThis.androidDownload ??= null;\n' + src;
   // And for the sections a page has folded away: state.js reads them from localStorage at load, so a slice that only

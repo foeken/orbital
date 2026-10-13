@@ -1557,6 +1557,14 @@ flow('A node assigned to ChatGPT goes to your latest chat, or a new one, and its
   await p.waitFor('__set.length === 1', 'the assignment sent');
   assert.deepEqual(await p.js('__set[0]'), ['codex', { newChat: true }], 'to ChatGPT, in a new chat');
   await p.waitFor('document.getElementById("toast").textContent === "Sent to ChatGPT, in a new chat"', 'a note saying where it went');
+  // one selected row is that node, as the caret in it would be: a click selects a task's row, and its agents are offered
+  await p.js('setView("library")'); await p.js('loadView("library")'); await p.waitFor(T('Book a room for the offsite'), 'the Library task');
+  await clickWords(p, 'Book a room for the offsite'); await settle(p, 150);
+  assert.deepEqual(await p.js('selKeys().map((k) => items.get(k).node.id)'), ['tana:text:mockpin1'], 'the click selects the task');
+  await p.key('⌘K'); await p.waitFor('!palette.hidden', 'the palette'); await p.type('assign to chatgpt');
+  await p.waitFor('palRows[palIndex] && palRows[palIndex].label === "Assign to ChatGPT \u2026"', 'Assign to ChatGPT … for the selected task');
+  assert.equal(await p.js('palRows[palIndex].group'), 'Selection', 'under the selection');
+  await closePalette(p);
 });
 
 

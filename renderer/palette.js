@@ -302,24 +302,28 @@ function paletteRows(q, typed = q) {
   // written into the node's own assignees. The label says what pressing it does, so it carries no id — same reason
   // as the watch row above. Assigning asks what the agent should do first (the prompt page keeps the palette open);
   // taking it back needs nothing typed, so it happens on the press.
-  if (palDoc && tana.setAgent && isRealId(palDoc.id)) {
-    const assigned = agentIds.has(palDoc.id), doc = palDoc;
+  // One selected row is that node, as the caret in it would be: a click selects a task's row, and its agents went missing
+  const picked = selKeys().length === 1 && items.get(selKeys()[0]);
+  const pickedDoc = picked && (referenceTarget(picked.node) || (picked.node.kind === 'document' ? picked.node : null));
+  const agentDoc = pickedDoc || palDoc, agentGroup = pickedDoc ? 'Selection' : docGroup;
+  if (agentDoc && tana.setAgent && isRealId(agentDoc.id)) {
+    const assigned = agentIds.has(agentDoc.id), doc = agentDoc;
     const holder = agentNamed((agentTasks.get(doc.id) || {}).agent);
     // Assigning is offered whether or not the node is with an agent already: handing it over again replaces the request
     // in its Agent context block (main/documents.js writeAgentContext), to that agent or another. One row per agent that
     // is on, so "Assign to Echo …" is found by its name: the same prompt page, that agent picked.
     // A saved search is a view and a chat a conversation, not work: nothing in either for an agent to do (Unassign stays, for one handed over before)
     if (!isSearchDoc(doc) && !/^tana:(chat|type):/.test(String(doc.id))) { // nor a type: schema, not work
-      for (const a of agentsOn()) rows.push({ rank: 'codexTo', group: docGroup, icon: a.icon, label: 'Assign to ' + a.label + ' …', hint: assigned && holder && holder.id === a.id ? 'Replaces what it was asked' : AGENT_WHERE[a.id] || (a.linked ? 'Through the Orbital MCP server' : ''),
+      for (const a of agentsOn()) rows.push({ rank: 'codexTo', group: agentGroup, icon: a.icon, label: 'Assign to ' + a.label + ' …', hint: assigned && holder && holder.id === a.id ? 'Replaces what it was asked' : AGENT_WHERE[a.id] || (a.linked ? 'Through the Orbital MCP server' : ''),
         keepOpen: true, run: () => openAgentPrompt(doc, a.id) });
     }
   }
   // Unassign: one row for whoever has the node, its agent and its people alike, all of them taken off on the press
-  if (palDoc && isRealId(palDoc.id)) {
-    const doc = palDoc, assigned = tana.setAgent && agentIds.has(doc.id), holder = agentNamed((agentTasks.get(doc.id) || {}).agent);
+  if (agentDoc && isRealId(agentDoc.id)) {
+    const doc = agentDoc, assigned = tana.setAgent && agentIds.has(doc.id), holder = agentNamed((agentTasks.get(doc.id) || {}).agent);
     loadTaskMeta(doc.id);
     const people = tana.setAssignees ? ((taskMetaById.get(doc.id) || {}).assignees || []) : [];
-    if (assigned || people.length) rows.push({ rank: 'unassign', group: docGroup, icon: 'unassigned', label: 'Unassign',
+    if (assigned || people.length) rows.push({ rank: 'unassign', group: agentGroup, icon: 'unassigned', label: 'Unassign',
       hint: [assigned ? (holder ? holder.label : 'Agent') : '', ...people.map(memberName)].filter(Boolean).join(', '),
       run: () => run(async () => {
         if (people.length) setTaskAssignees(doc, []);
