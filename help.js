@@ -67,11 +67,20 @@ for (const b of helpOS) {
 }
 // The ChatGPT page: sign in with ChatGPT happens on its ⌘K page in the page that asked (renderer/agent.js startChatGPTLogin).
 // Signed in already, the line says so instead, at the button's height: the card is as tall as its tallest page, so a
-// line that came or went would move it after it had opened.
+// line that came or went would move it after it had opened. Not signed in and no ChatGPT app on this Mac (main/ai.js
+// installed), the line asks for the app first, and looks again when Orbital comes back from the browser or the installer.
 document.getElementById('helpChatGPT').onclick = () => { helpChatGPT = true; helpEl.close(); };
-if (helpApi && helpApi.chatgptStatus) helpApi.chatgptStatus().then((s) => {
-  if (s && s.signedIn) document.getElementById('helpAI').textContent = 'Signed in with ChatGPT' + (s.email ? ' as ' + s.email : '');
-}, () => {});
+const helpAI = document.getElementById('helpAI'), helpGetApp = document.getElementById('helpGetApp');
+document.getElementById('helpGetAppButton').onclick = () => { if (helpApi && helpApi.openExternal) helpApi.openExternal('https://openai.com/chatgpt/download/').catch(() => {}); };
+function checkHelpAI() {
+  if (helpApi && helpApi.chatgptStatus) helpApi.chatgptStatus().then((s) => {
+    const getApp = !!s && !s.signedIn && s.installed === false;
+    helpGetApp.hidden = !getApp; helpAI.hidden = getApp;
+    if (s && s.signedIn) helpAI.textContent = 'Signed in with ChatGPT' + (s.email ? ' as ' + s.email : '');
+  }, () => {});
+}
+checkHelpAI();
+window.addEventListener('focus', () => { if (!helpGetApp.hidden) checkHelpAI(); });
 document.getElementById('helpClose').onclick = () => helpEl.close();
 helpEl.addEventListener('mousedown', (e) => { if (e.target === helpEl) helpEl.close(); }); // the scrim, as with the palette
 // ⌘K, the key the tour teaches, closes it and opens the palette in the page that asked

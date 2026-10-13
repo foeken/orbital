@@ -763,7 +763,7 @@ flow('golden path: Quick Add Task makes a typed task for someone', async (p) => 
 // shows its code and download link in that same place instead, and the card keeps its size. Without the page asked
 // for, the tour starts at the beginning
 const HELP_API = String.raw`if (location.pathname === '/help.html') { window.__opened = [];
-  window.api = { openExternal: async (url) => { __opened.push(url); }, closeOverlay: () => {}, chatgptStatus: async () => ({ signedIn: false }),
+  window.api = { openExternal: async (url) => { __opened.push(url); }, closeOverlay: () => {}, chatgptStatus: async () => ({ signedIn: false, installed: !new URLSearchParams(location.search).has('noapp') }),
     androidRelease: async () => (new URLSearchParams(location.search).has('apk') ? { version: '0.10.0' } : null) }; }`;
 flow('Install mobile app opens the Help tour on its phone page: iPhone\u2019s code and link, Android coming soon or its download', async (p) => {
   const link = fs.readFileSync(path.join(root, 'help.html'), 'utf8').match(/id="helpMobileLink" href="([^"]+)"/)[1];
@@ -824,6 +824,29 @@ flow('Install mobile app opens the Help tour on its phone page: iPhone\u2019s co
   await p.open('help.html?theme=light');
   await p.waitFor('document.querySelector(".hpage.on")', 'the tour');
   assert.equal(await p.js('[...document.querySelectorAll(".hpage")].indexOf(document.querySelector(".hpage.on"))'), 0, 'Help: the first page');
+});
+
+// 16c. The tour's ChatGPT page (help.js checkHelpAI): with the ChatGPT app on this Mac it offers Sign in with ChatGPT;
+// without it (main/ai.js status installed false) it asks for the app first, its download page in the browser, the tour
+// staying where it is, and the card the same size either way
+flow('The Help tour asks for the ChatGPT app before the sign-in when it is not installed', async (p) => {
+  const seen = () => p.js('[...document.querySelectorAll("#help-chatgpt .hact")].filter((e) => !!e.offsetParent).map((e) => e.id)');
+  const card = () => p.js('(() => { const c = document.querySelector("#help .card"); return [c.offsetWidth, c.offsetHeight]; })()');
+  await p.beforeLoad(HELP_API);
+  await p.open('help.html?at=chatgpt&theme=light');
+  await p.waitFor('document.querySelector(".hpage.on")', 'the tour');
+  await settle(p, 100);
+  assert.deepEqual(await seen(), ['helpAI'], 'the app installed: Sign in with ChatGPT');
+  const withApp = await card();
+  for (const theme of ['light', 'dark']) {
+    await p.open('help.html?at=chatgpt&noapp&theme=' + theme);
+    await p.waitFor('!!document.getElementById("helpGetApp").offsetParent', 'the app asked for');
+    assert.deepEqual(await seen(), ['helpGetApp'], 'no app: Get the ChatGPT app first, and no sign-in yet');
+    assert.deepEqual(await card(), withApp, 'the card keeps its size');
+    assert.ok(await p.js('(() => { const e = document.getElementById("helpGetApp"); return e.scrollHeight <= e.clientHeight && e.scrollWidth <= e.clientWidth; })()'), 'on one line, in its row');
+  }
+  await p.js('document.getElementById("helpGetAppButton").click(); 1'); await settle(p, 100);
+  assert.deepEqual(await p.js('[__opened, document.querySelector(".hpage.on").id]'), [['https://openai.com/chatgpt/download/'], 'help-chatgpt'], 'its download page opens in the browser and the tour stays');
 });
 
 // 17. Writing on today's page: ⌘K Today opens it, "/" turns a row into a heading or a checklist, "@" links a node or a

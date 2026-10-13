@@ -1448,7 +1448,9 @@ keeps its caret and gets the keys back when the overlay closes, with what it had
   words, with no code, link or button. Cmd+K Install mobile app's hint says which. The card keeps its size between them.
   Cmd+K Install mobile app opens the tour on that page (`openHelp('mobile')`, main.js `openOverlay` passing `at=mobile`
   to help.html, and nothing else it is sent). The page before it offers Sign in with ChatGPT: the tour closes and its page opens the Cmd+K ChatGPT page
-  and starts the sign-in (`onOverlayClosed` `chatgpt`); signed in already, it says so instead. Opened by Cmd+K Help, the ?
+  and starts the sign-in (`onOverlayClosed` `chatgpt`); signed in already, it says so instead; not signed in and without
+  the ChatGPT app (no Codex on this Mac, main/ai.js status `installed`), it offers Get the ChatGPT app first, its download
+  page in the browser, and asks again when the tour has the focus back. Opened by Cmd+K Help, the ?
   in the header row, and once by itself on a first start (`helpOnce`, the `helpSeen` preference): after login, once
   the connection is up and the page the launch came back to is drawn. Main opens it (`api.claimHelp`, main.js
   `help:claim`): only after this session read the settings document (a failed read declines), over the first page asking
