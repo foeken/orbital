@@ -586,6 +586,7 @@ html.links .app { display: none; }
 .node:is(.tl-today, .tl-upcoming) > .line .text { color: inherit; } /* Today's Tasks and Upcoming meetings read as titles, their markers still quiet */
 .node.tl-done > .line .text s, .node.tl-done > .line .text del { color: var(--muted); }
 .node.tl > .line > .body > .subtext { margin-top: 2px; }
+.node.tl > .line > .body > .tl-detail + .subtext { margin-top: 14px; } /* clear of the card: its -6px bottom margin otherwise pulls the grey line against it */
 /* a group's rows hang under its words (block + t-bullet: the list rule it overrides): a task by its type's glyph and its
    box, anything else by its type's glyph */
 .node.block.t-bullet.tl > .children { margin-left: 132px; padding-bottom: 8px; border-left: 0; }
