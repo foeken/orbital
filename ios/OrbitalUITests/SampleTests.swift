@@ -362,14 +362,13 @@ final class SampleSettingsTests: SampleCase {
     }
 
     // Settings' Agents has Connect your personal agent (Agents.swift): the ? beside Add both plugins opens the help with
-    // ChatGPT's plugins, and the sample, which saves nothing, asks the MCP server for no code and says so, with Try again
+    // ChatGPT's plugins, and the sample shows an invented code that links nothing (Engine.swift linkCode), waiting for an agent
     func testConnectToYourDotFromSettings() {
         launch(["-settings"])
         let connect = app.buttons["Connect your personal agent"]
         XCTAssert(connect.waitForExistence(timeout: 5))
         connect.tap()
-        XCTAssert(app.staticTexts["The sample saves nothing"].waitForExistence(timeout: 5))
-        XCTAssert(app.buttons["Try again"].exists)
+        XCTAssert(app.staticTexts["Waiting for your agent to use the code…"].waitForExistence(timeout: 5))
         app.buttons["Help"].tap()
         XCTAssert(app.descendants(matching: .any)["Open ChatGPT plugins"].waitForExistence(timeout: 5)) // a Link: neither a button nor a link to XCUITest everywhere
     }
