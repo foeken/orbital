@@ -64,7 +64,13 @@ function askNotes(eventId) {
       const el = textEl(key);
       if (!pending.has(key) && answer.node.editable !== false && (!el || JSON.stringify(readSegs(el)) === JSON.stringify(held.segs))) scheduleSave(held.item, held.segs);
     }
-  }, () => { if (asked === notesAsked && notesSeq.get(eventId) === seq) { meetingNotes.set(eventId, { id: null, failed: true }); renderSoon(); } });
+  }, () => {
+    if (asked !== notesAsked || notesSeq.get(eventId) !== seq) return;
+    // notes already on screen stay there, the line saying they could not be checked: main still checks every write to them
+    const was = meetingNotes.get(eventId);
+    meetingNotes.set(eventId, was && was.id ? { ...was, checking: false, failed: true } : { id: null, failed: true });
+    renderSoon();
+  });
 }
 // Read again: main says the notes changed (made in another pane, or who sees them changed). Until the answer lands the
 // line says it is checking, so "only you" is never left over notes just shared; main refuses their writes meanwhile.
@@ -74,11 +80,23 @@ function noteNotesChanged(eventId) {
   if (was && was.id) { meetingNotes.set(eventId, { ...was, checking: true }); patchNotesHead(eventId); }
   askNotes(eventId);
 }
-function forgetNotes(signedOutToo) { notesAsked++; meetingNotes.clear(); notesWriteUps.clear(); notesSeq.clear(); notesHeld.clear(); summaryMeta.clear(); if (signedOutToo) { notesDrafts.clear(); notesOn.clear(); } }
+// Signed out, everything goes. A lost connection drops only the answers still on their way (notesAsked) and keeps the
+// notes on screen: cleared, they vanished at every drop of the sync stream until it was back and Tana had checked them
+// again. They are asked again once it is back (notesReconnected); every other meeting's when next shown.
+function forgetNotes(signedOutToo) {
+  notesAsked++;
+  if (signedOutToo) { meetingNotes.clear(); notesWriteUps.clear(); notesSeq.clear(); notesHeld.clear(); summaryMeta.clear(); notesDrafts.clear(); notesOn.clear(); return; }
+  for (const [id, a] of meetingNotes) if (!(a && a.id && zoom && zoom.docId === id)) meetingNotes.delete(id);
+  for (const [uri, m] of summaryMeta) if (!m) summaryMeta.delete(uri); // asked and now never answered: asked again when shown
+}
+// Back online: the notes kept on screen through the drop are checked again, shown as they are until the answer lands
+function notesReconnected() { if (zoom && (meetingNotes.get(zoom.docId) || {}).id) askNotes(zoom.docId); }
 // Arriving at a meeting whose notes could not be checked asks again (renderer/edit.js noteNavigation, on every arrival).
 // Never from the failure itself: a lookup that keeps failing would then ask, fail and draw in a loop.
 function notesArrived(eventId) {
-  if (!(meetingNotes.get(eventId) || {}).failed) return;
+  const was = meetingNotes.get(eventId);
+  if (!(was || {}).failed) return;
+  if (was.id) return askNotes(eventId); // notes on screen stay there while asked
   meetingNotes.delete(eventId);
   renderSoon();
 }

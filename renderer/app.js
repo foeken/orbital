@@ -23,6 +23,7 @@ function showStatus(s) {
   // go first. Any later reconnect finds the place already spent, so this is boot order only.
   if (connected && !wasConnected) { taskMetaFailed.clear(); loadSearches(); loadWorkspaceTypes(); loadPinned(true); restorePlace().finally(() => { placed = true; loadView(); renderSoon(); helpOnce(); }); } // the types too: a key recorded on a Cmd+K type row finds it before Cmd+K opens; the tour opens over the page it came back to
   if (connected && !wasConnected && typeof noteOldServer === 'function') noteOldServer(); // the workspace's MCP server, when it is older than this Orbital needs (renderer/agent.js)
+  if (connected && !wasConnected && typeof notesReconnected === 'function') notesReconnected(); // a meeting's notes kept through the drop, checked again
   $('loginBox').hidden = !state.showLogin;
   $('pagehead').hidden = state.showLogin; // signed out, the login is the page: no view title above it
   $('navbtns').hidden = state.showLogin; // nor back, forward or the page's buttons
