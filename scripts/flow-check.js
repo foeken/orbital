@@ -1207,7 +1207,7 @@ flow('golden path: switch a meeting between your notes and its summary', async (
   await p.type(' or sooner'); await p.js('flushAll()'); await settle(p, 300);
   assert.equal((await p.js('__saved(' + J(wu) + ')')).at(-1), 'Next check-in in two weeks or sooner', 'saved to the write-up');
   // before the write-up was known (a new session, main/related.js not read yet): the empty notes' draft row, no switch
-  await p.js('window.__wuOf = tana.summaryUri; tana.summaryUri = async () => null; forgetNotes(false); render(true); 1');
+  await p.js('window.__wuOf = tana.summaryUri; tana.summaryUri = async () => null; forgetNotes(true); render(true); 1');
   await p.waitFor('document.querySelector("#outline .node.draft .text")', 'the notes\u2019 draft row');
   assert.equal(await p.js('!!document.querySelector(".notes-switch")'), false, 'no write-up known: no switch');
   await p.js('tana.summaryUri = __wuOf; 1');
@@ -1263,13 +1263,17 @@ flow('golden path: switch a meeting between your notes and its summary', async (
   await p.js('__notes.summaryReadOnly(); 1');
   await p.waitFor('/read only/.test(document.querySelector(".notes-head")?.textContent || "")', 'read only said');
   await p.waitFor('!(' + T('Agreed to trim the synthetic roadmap to two themes') + ').isContentEditable', 'and its rows read-only');
-  // an answer asked before the session changed is dropped: the write-up's audience is held back, the connection drops
-  // (forgetNotes, as renderer/app.js does), and the late answer leaves nothing behind
+  // an answer asked before the connection dropped is dropped: the write-up's audience is held back, the connection drops
+  // (forgetNotes, as renderer/app.js does), and the late answer is not used; the notes and the write-up stay on screen
   await p.js('(' + tab('Notes') + ').click(); summaryMeta.clear(); const slow = tana.taskMeta; tana.taskMeta = (id) => new Promise((r) => setTimeout(r, 700)).then(() => slow(id)); tana.summaryUri = async () => null; 1'); await settle(p, 200);
   await p.js('(' + tab('Summary') + ').click()'); await settle(p, 50);
   assert.equal(await p.js('summaryMeta.get(' + J(wu) + ')'), null, 'asked, not answered yet');
-  await p.js('forgetNotes(false); render(true); 1'); await settle(p, 1000);
-  assert.deepEqual([await p.js('summaryMeta.has(' + J(wu) + ')'), await p.js('document.querySelectorAll(".notes-head .face").length'), await p.js('!!document.querySelector(".notes-switch")')], [false, 0, false], 'the late answer is dropped, and nothing of the write-up stays on screen');
+  await p.js('forgetNotes(false); 1');
+  assert.deepEqual([await p.js('summaryMeta.has(' + J(wu) + ')'), await p.js('meetingNotes.get("mockmeeting4")?.id')], [false, notes], 'the late answer is dropped, the notes kept');
+  await p.js('render(true); 1'); await settle(p, 1000);
+  assert.deepEqual([await p.js('!!document.querySelector(".notes-switch")'), (await p.js('__screen()'))[0]], [true, 'Agreed to trim the synthetic roadmap to two themes'], 'the write-up and the switch to the notes stay on screen');
+  await p.js('(' + tab('Notes') + ').click()'); await settle(p, 300);
+  assert.deepEqual(await p.js('__screen()'), ['Private thought kept'], 'and the notes under it');
 });
 
 // 18. A view (docs/VIEWS.md): the Library grouped, sorted and filtered from Cmd+K and ⌘F, then saved as a search that

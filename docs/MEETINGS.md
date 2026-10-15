@@ -122,7 +122,9 @@ their own after the last one.
 Notes Tana lists that cannot be checked just now (their document reconnecting after a resync or a dropped stream, a
 graph or owner-chain read failing) are never answered as none: an open waits up to 5 s for them, then says they could
 not be checked, and arriving at the meeting again asks again. Answered as none, the page showed them empty until the
-connection dropped and came back.
+connection dropped and came back. Notes already on screen stay there through a dropped connection and a check that
+fails (the line says they could not be checked; main checks every write against the live document anyway), and are
+checked again when the connection is back: cleared at every drop, they vanished until Tana had answered again.
 
 **How a note is made, safely and once.** The seed — type, the title "Private notes", access, the mark, the reference
 row — is the same on every machine, byte for byte: written by a peer that is yours as Tana reads peers (sdk/sync.js

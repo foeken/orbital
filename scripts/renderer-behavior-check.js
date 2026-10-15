@@ -8609,7 +8609,8 @@ async function runNotesRetryCheck() {
     // what renderOutline does: the page's rows (a meeting's are its notes'), then the place it drew
     const draw = () => { if (zoom && zoom.docId === M) notesBody(meeting); noteNavigation(); };
     ({ open: (id) => { zoom = id ? { docId: id, nodeId: null } : null; draw(); }, draw, asks: () => asks, works: () => { fail = false; },
-      failed: () => !!(meetingNotes.get(M) || {}).failed });
+      failed: () => !!(meetingNotes.get(M) || {}).failed, fails: () => { fail = true; }, answer: () => meetingNotes.get(M),
+      shown: (a) => meetingNotes.set(M, a), drop: () => forgetNotes(false), back: () => notesReconnected() });
   `);
   const tick = () => new Promise((r) => setTimeout(r, 0));
   api.open('tana:event:m'); await tick();
@@ -8620,6 +8621,15 @@ async function runNotesRetryCheck() {
   assert.deepEqual([api.asks(), api.failed()], [2, false], 'arriving at the meeting again asks again, and the answer replaces the failure');
   api.draw(); await tick();
   assert.equal(api.asks(), 2, 'once per arrival');
+  // notes on screen survive a dropped connection, its re-check, and a re-check that fails (main checks every write)
+  api.shown({ id: 'tana:text:n', node: {}, owner: 'tana:user-profile:me' }); api.fails(); api.drop();
+  assert.equal(api.answer()?.id, 'tana:text:n', 'a lost connection keeps the notes on screen');
+  api.back(); await tick();
+  assert.deepEqual([api.asks(), api.answer().id, api.answer().failed], [3, 'tana:text:n', true], 'checked again once back; failing, they stay, said');
+  api.open('tana:text:other'); api.open('tana:event:m');
+  assert.equal(api.answer()?.id, 'tana:text:n', 'arriving again asks again with the notes still shown');
+  await tick();
+  assert.equal(api.asks(), 4, 'asked');
   console.log('ok  a meeting whose notes could not be checked asks again when you come back to it, never in a loop');
 }
 // The Timeline's New meeting and Plan one open Create new's name page for a meeting, and Create new itself when a meeting
