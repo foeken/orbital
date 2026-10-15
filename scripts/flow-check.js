@@ -207,6 +207,23 @@ flow('editing keeps the screen and the saved outline the same', async (p) => {
   assert.deepEqual(await same('⌘Z after the delete'), ['alpha', 'beta', '  gamma', 'delta']);
 });
 
+// 4a. ↩ on an image: it cannot be split, so an empty row goes under it with the caret, whether the caret is on the
+// picture or the picture is selected
+flow('↩ on an image adds a row under it', async (p) => {
+  await p.start({ real: true });
+  await p.js("goTo('tana:text:mockdoc0')"); await settle(p);
+  const img = '[...items.values()].find((i) => i.node.type === "image")';
+  await p.waitFor(img, 'the image row');
+  const under = () => p.js('(() => { const i = ' + img + ', list = kids.get(i.docId); return list[list.indexOf(i.node) + 1].text; })()');
+  await p.js('placeCaret(' + img + '.key)'); await p.key('↩'); await p.type('caret was on it');
+  await p.js('flushAll()'); await settle(p, 450);
+  assert.equal(await under(), 'caret was on it', '↩ with the caret on the image');
+  await p.js('leaveText(); const k = ' + img + '.key; sel = { keys: new Set([k]), anchor: k, focus: k }; applySel(); 1');
+  await p.key('↩'); await p.type('it was selected');
+  await p.js('flushAll()'); await settle(p, 450);
+  assert.equal(await under(), 'it was selected', '↩ with the image selected');
+});
+
 // 4b. A full reference made inline by Space (renderer/edit.js makeInline): the row is the node it points at until Space
 // is typed after it, from the caret after the chip (Enter on the selected row) or from a rename not yet typed in (a
 // second click). Then it is a line with the chip in its target's colour and glyph, and stays one once saved, though a
