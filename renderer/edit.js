@@ -87,6 +87,14 @@ function pasteMarkdown(item, el, text) {
 }
 
 // ---- structural operations ----
+// Enter on an image or divider: nothing to split, so an empty row goes under it and takes the caret
+async function rowBelow(item) {
+  if (!canEditItem(item)) return;
+  let newId;
+  await run(async () => { newId = await tana.insertAfter(item.docId, item.node.id, ''); await reload(item.docId); });
+  render(true);
+  if (newId) placeCaret(item.docId + '/' + newId, 0);
+}
 async function splitNode(item, el, off) {
   if (!canEditItem(item)) return;
   const { docId, node } = item;

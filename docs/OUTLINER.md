@@ -306,7 +306,8 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   cache of 200. An image row with no alt shows the title Tana's AI gives the image document, as alt and tooltip. An
   image draws a marker only where a list row would (`blockType` reports the list an atom sits in) and is never
   expandable. Space or a click opens a full view (`openImage`): one overlay, closed by Escape, Space, Enter or a click,
-  focus back to the row. Backspace and ⇧⌘⌫ remove it; Up and Down step over it.
+  focus back to the row. Backspace and ⇧⌘⌫ remove it; Up and Down step over it; Enter, with the caret on it or it
+  selected, puts an empty row under it and the caret there (`rowBelow`), as it does on a divider.
 - **Spaces.** A `tana:space:` document's children are the documents it owns (`spaceChildren`), drawn as document rows,
   newest first; expanding one loads its own children. There is no draft inside a space, and Enter on a document
   child there does nothing.

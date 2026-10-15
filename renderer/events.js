@@ -45,11 +45,12 @@ onRows('keydown', (e) => {
     else if (mod) return;
     return e.preventDefault();
   }
-  if (isAtomic(item.node)) { // image or divider, not editable: Backspace / ⌘⇧⌫ removes, Up/Down step past, Shift+Up/Down select, ⌘⇧Up/Down moves; everything else is swallowed
+  if (isAtomic(item.node)) { // image or divider, not editable: Backspace / ⌘⇧⌫ removes, Enter adds a row under it, Up/Down step past, Shift+Up/Down select, ⌘⇧Up/Down moves; everything else is swallowed
     const vert = e.key === 'ArrowUp' || e.key === 'ArrowDown', dir = e.key === 'ArrowUp' ? -1 : 1;
     if (e.key === 'Backspace') removeNode(item, el);
     else if (e.key === ' ' && isImage(item.node)) openImage(item.node); // the row cannot be typed into: Space looks at the picture
     else if (e.key === 'Enter' && item.node.table) enterTable(el); // a table's way in: its first cell
+    else if (e.key === 'Enter' && !mod) rowBelow(item);
     else if (vert && e.shiftKey && mod) shiftNode(item, el, 'move', dir < 0 ? 'up' : 'down');
     else if (vert && e.shiftKey) extendSel(item, dir);
     else if (vert && !mod) moveTo(el, dir, 0);
