@@ -121,6 +121,20 @@ struct NodeScreen: View {
         .onChange(of: engine.demo) { page = nil; Task { await load() } }
         // untitled: no title at all, so the page around it keeps its own (the Timeline's tasks column)
         .modifier(Titled(title: !titled ? nil : page?.sensitive == true && !engine.reveal ? "" : engine.translator.words(page?.title ?? "", sensitive: page?.sensitive == true).0))
+        // a document's pins: the days it is pinned to under its title, and the pin menu at the top right (PinChoices)
+        .navigationSubtitle(access == nil ? "" : Phrases.pinnedTo(engine.days[id] ?? [], today: PinChoices.today, tomorrow: PinChoices.tomorrow) ?? "")
+        .toolbar {
+            if access != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    let ahead = Phrases.pinnedTo(engine.days[id] ?? [], today: PinChoices.today, tomorrow: PinChoices.tomorrow)
+                    Menu { PinChoices(id: id, engine: engine, then: load) } label: {
+                        // in the text colour while pinned from today on, quiet otherwise; the line under the title says to when
+                        Image("Glyphs/pinDate").resizable().frame(width: 20, height: 20).foregroundStyle(ahead == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                    }
+                    .accessibilityLabel("Pin").accessibilityValue(ahead ?? "Not pinned")
+                }
+            }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .task(id: engine.phase) {
             guard engine.phase == .ready else { return }
@@ -167,6 +181,55 @@ private struct Titled: ViewModifier {
     let title: String?
     func body(content: Content) -> some View {
         if let title { content.navigationTitle(title) } else { content }
+    }
+}
+
+// A meeting, as the desktop's page has it (renderer/meetingnotes.js, renderer/fields.js attendeesFieldEl): its attendees,
+// A node's pin menu: today, tomorrow and each later day it is pinned to, ticked where it is (Phrases.pinChoices), then
+// Pick a Date … and Remove All Pins. The pin button at the top of its page and the long press's Pin to … both show it.
+struct PinChoices: View {
+    let id: String
+    let engine: Engine
+    var then: () async -> Void = {}
+    static var today: String { Day.key(.now) }
+    static var tomorrow: String { Day.key(Calendar.current.date(byAdding: .day, value: 1, to: .now) ?? .now) }
+
+    var body: some View {
+        let days = engine.days[id] ?? [], today = Self.today, tomorrow = Self.tomorrow
+        ForEach(Phrases.pinChoices(days, today: today, tomorrow: tomorrow), id: \.day) { c in
+            Toggle(Phrases.pinDay(c.day, today: today, tomorrow: tomorrow), isOn: Binding(get: { c.on }, set: { on in Task { await engine.pinDay(id, c.day, on); await then() } }))
+        }
+        Divider()
+        Button("Pick a Date …", systemImage: "calendar") { engine.pickingDay = .init(id: id, then: then) }
+        if !days.isEmpty {
+            Divider()
+            Button("Remove All Pins", systemImage: "pin.slash", role: .destructive) { Task { await engine.pin(id, false); await then() } }
+        }
+    }
+}
+
+// Pick a Date …: a day from today on, pinned with Pin (Engine.pinDay); laid over everything by Shell
+struct PinDaySheet: View {
+    let engine: Engine
+    let picking: Engine.PickingDay
+    @State private var date = Calendar.current.date(byAdding: .day, value: 2, to: .now) ?? .now
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            DatePicker("Day", selection: $date, in: Calendar.current.startOfDay(for: .now)..., displayedComponents: .date)
+                .datePickerStyle(.graphical)
+                .padding(.horizontal)
+                .navigationTitle("Pin to a Day")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Pin") { let day = Day.key(date); dismiss(); Task { await engine.pinDay(picking.id, day, true); await picking.then() } }
+                    }
+                }
+        }
+        .presentationDetents([.medium, .large])
     }
 }
 
@@ -411,20 +474,7 @@ struct NodeDetails: View {
             if access.audience == "people", !access.people.isEmpty { Faces(people: access.people.persons) } else { Engine.Access.label(access.audience, access.space) }
         }
         .sheet(isPresented: $picking) { VisibilitySheet(id: id, access: access, engine: engine, done: reload) }
-        // pinned to today, or to any day: the long press's Pin to Today and Remove Pin, here too (an outside pin: link opens
-        // the node, where it is done); the desktop's pin-to-a-day glyph in the text colour, by its word as Android draws it
-        // (a Label puts a system symbol, in the accent blue, in the list's icon column)
-        let pinned = engine.pinned.contains(id)
-        Button { Task { await engine.pin(id, !pinned); await reload() } } label: {
-            HStack(spacing: 12) {
-                Image("Glyphs/pinDate").resizable().frame(width: 18, height: 18).accessibilityHidden(true)
-                Text(pinned ? "Remove Pin" : "Pin to Today")
-                Spacer(minLength: 0)
-            }
-            .foregroundStyle(.primary).contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .modifier(FieldLine())
+        // its pins are the pin menu in the top bar (NodeScreen, PinChoices); an outside pin: link opens the node there
         // handed to your Dot (Agents.swift): its name and its last Agent status line; a tap asks it again or takes it back
         if let held = access.agent {
             Menu {

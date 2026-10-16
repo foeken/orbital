@@ -30,4 +30,26 @@ enum Phrases {
         let left = m < 60 ? "\(m) \(later ? "" : "more ")min" : "\(m / 60) h" + (m % 60 > 0 ? " \(m % 60) min" : "")
         return ("No meetings for ", left, later ? " after this one" : "")
     }
+
+    // A node's pinned days (YYYY-MM-DD, orbital.setup days): its pin menu lists today, tomorrow and every later day it is
+    // pinned to, each with whether it is; the line under its title names those from today on. Days gone by stay pinned
+    // until Remove All Pins and are not listed: a task pinned day after day would fill the menu.
+    static func pinChoices(_ days: [String], today: String, tomorrow: String) -> [(day: String, on: Bool)] {
+        ([today, tomorrow] + Set(days.filter { $0 > tomorrow }).sorted()).map { ($0, days.contains($0)) }
+    }
+    static func pinnedTo(_ days: [String], today: String, tomorrow: String) -> String? {
+        let words = Set(days.filter { $0 >= today }).sorted().map { $0 == today ? "today" : $0 == tomorrow ? "tomorrow" : day($0) }
+        guard let last = words.last else { return nil }
+        return "Pinned to " + (words.count == 1 ? last : words.dropLast().joined(separator: ", ") + " and " + last)
+    }
+    static func pinDay(_ key: String, today: String, tomorrow: String) -> String { key == today ? "Today" : key == tomorrow ? "Tomorrow" : day(key) }
+    // YYYY-MM-DD as "Fri 23 Oct", in the app's English whatever the phone's language
+    static func day(_ key: String) -> String {
+        let p = key.split(separator: "-").compactMap { Int($0) }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        guard p.count == 3, (1...12).contains(p[1]), let d = cal.date(from: DateComponents(year: p[0], month: p[1], day: p[2])) else { return key }
+        let weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][cal.component(.weekday, from: d) - 1]
+        return "\(weekday) \(p[2]) " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][p[1] - 1]
+    }
 }

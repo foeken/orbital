@@ -338,6 +338,7 @@ fun Shell(engine: Engine, start: Start = Start()) {
     if (adding) QuickAdd(engine, search = if (path.isEmpty()) (page as? Menu.Search)?.id else null) { adding = false } // on a saved search: a row of it
     engine.shared?.let { s -> QuickAdd(engine, shared = s) { engine.shared = null } }
     engine.assigning?.let { a -> AssignSheet(engine, a) { engine.assigning = null } }
+    engine.pickingDay?.let { p -> PinDayDialog(engine, p) { engine.pickingDay = null } } // a pin menu's Pick a Date …
     engine.handing?.let { h -> HandSheet(engine, h) { engine.handing = null } } // Assign to your Dot (Agents.kt)
     ShareAskDialog(engine)
 }
@@ -406,10 +407,17 @@ private fun saveOrder(list: List<Menu.Search>, engine: Engine) = engine.platform
 // busy: what Quick Add handed over is still being made (Engine.adding), and a thin ring turns around the +, which stays
 // the button it was, so another task can be added meanwhile (Shell.swift AddGlyph)
 @Composable
-fun PageBar(title: String, onBack: (() -> Unit)? = null, onMenu: (() -> Unit)? = null, onAdd: (() -> Unit)? = null, busy: Boolean = false) {
+// subtitle: a grey line under the title (a document's pinned days); action: a control before + (its pin button)
+fun PageBar(title: String, onBack: (() -> Unit)? = null, onMenu: (() -> Unit)? = null, onAdd: (() -> Unit)? = null, busy: Boolean = false,
+            subtitle: String? = null, action: (@Composable () -> Unit)? = null) {
     val c = Theme.colors
     CenterAlignedTopAppBar(
-        title = { Text(title, style = Type.headline, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        title = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(title, style = Type.headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (subtitle != null) Text(subtitle, style = Type.footnote, color = c.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        },
         navigationIcon = {
             when {
                 onBack != null -> IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
@@ -417,6 +425,7 @@ fun PageBar(title: String, onBack: (() -> Unit)? = null, onMenu: (() -> Unit)? =
             }
         },
         actions = {
+            action?.invoke()
             if (onAdd != null) IconButton(onAdd, Modifier.semantics { if (busy) stateDescription = "Adding" }) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(Icons.Filled.Add, "Quick Add Task")

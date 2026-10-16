@@ -27,6 +27,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     let translator = Translator() // auto-translate, set up from the settings document at each refresh
     var sensitiveIds: Set<String> = [] // marked sensitive in Orbital (synced), for the long-press menu
     var pinned: Set<String> = [] // pinned to a day, any day, for the long-press menu
+    var days: [String: [String]] = [:] // node -> every day it is pinned to (YYYY-MM-DD), for its pin menu (PinChoices)
     var agents: [Agent] = [] // your Dot and any other agent linked through orbital.md (Agents.swift), for the long-press menu
     var handed: [String: String] = [:] // node -> the linked agent it is handed to
     var removed: Set<String> = [] // deleted here: gone from every list at once, before Tana confirms it
@@ -280,7 +281,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             if let setup: Setup = try? await call("return await orbital.setup()", [:]) {
                 translator.use(to: setup.to, ai: setup.ai)
                 if translator.catalogue.isEmpty, let list = try? await ChatGPT.models(), !list.isEmpty { translator.catalogue = list } // once: what this account may ask
-                sensitiveIds = Set(setup.sensitive); pinned = Set(setup.pinned)
+                sensitiveIds = Set(setup.sensitive); pinned = Set(setup.pinned); days = setup.days ?? [:]
                 if let agents = setup.agents { self.agents = agents }
                 if let handed = setup.handed { self.handed = handed }
             }
@@ -328,7 +329,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // account), its ticks, its agents and marks, and the images fetched with its token
     private func forgetAccount() {
         ticks = Ticks(); removed = []; unpinned = []; unsent = []; unhanded = [:]
-        agents = []; handed = [:]; sensitiveIds = []; pinned = []
+        agents = []; handed = [:]; sensitiveIds = []; pinned = []; days = [:]
         images.removeAllObjects()
     }
 
@@ -388,7 +389,7 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     // What a refresh reads besides the rows (orbital.setup)
-    struct Setup: Decodable { let to: String?; let ai: [String: String]; let sensitive: [String]; let pinned: [String]; let agents: [Agent]?; let handed: [String: String]? }
+    struct Setup: Decodable { let to: String?; let ai: [String: String]; let sensitive: [String]; let pinned: [String]; var days: [String: [String]]? = nil; let agents: [Agent]?; let handed: [String: String]? }
 
     // Your Dot (ios/engine/agents.js, Agents.swift): the agents linked through orbital.md, linking one with a code as the
     // Mac's Connect your personal agent does, and a node handed to one with a request (Assign to <its name> …) or taken back
@@ -444,11 +445,25 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // is now (still on today's node, it comes back)
     func pin(_ id: String, _ on: Bool) async {
         // pinned or not at once (a node's Pin to Today, the long press's words), put back when Tana says no
-        let was = pinned.contains(id)
-        if on { pinned.insert(id) } else { pinned.remove(id); withAnimation(Self.collapse) { _ = unpinned.insert(id) } }
-        if !(await act("return await orbital.pin(id, on)", ["id": id, "on": on])) { if was { pinned.insert(id) } else { pinned.remove(id) } }
+        let was = pinned.contains(id), wasDays = days[id]
+        if on { pinned.insert(id); days[id] = Set((wasDays ?? []) + [Day.key(.now)]).sorted() }
+        else { pinned.remove(id); days[id] = nil; withAnimation(Self.collapse) { _ = unpinned.insert(id) } }
+        if !(await act("return await orbital.pin(id, on)", ["id": id, "on": on])) { if was { pinned.insert(id) } else { pinned.remove(id) }; days[id] = wasDays }
         unpinned.remove(id)
     }
+    // A node's pin menu (PinChoices): one day pinned or taken off, shown at once and put back when Tana says no. Today
+    // taken off leaves Today's Tasks at once, as Remove All Pins does.
+    func pinDay(_ id: String, _ day: String, _ on: Bool) async {
+        let was = days[id]
+        let now = on ? Set((was ?? []) + [day]).sorted() : (was ?? []).filter { $0 != day }
+        func set(_ list: [String]?) { days[id] = list?.isEmpty == false ? list : nil; if days[id] == nil { pinned.remove(id) } else { pinned.insert(id) } }
+        set(now)
+        if !on, day == Day.key(.now) { withAnimation(Self.collapse) { _ = unpinned.insert(id) } }
+        if !(await act("return await orbital.pinDay(id, day, on)", ["id": id, "day": day, "on": on])) { set(was) }
+        unpinned.remove(id)
+    }
+    struct PickingDay: Identifiable { let id: String; let then: () async -> Void }
+    var pickingDay: PickingDay? // Pick a Date …: the node whose date picker is open (PinDaySheet, laid over everything by Shell)
     var unpinned: Set<String> = [] // pins being taken off here, out of Today's Tasks before Tana answers
     static var collapse: Animation? { UIAccessibility.isReduceMotionEnabled ? nil : .snappy }
     // Settings' Auto-translate: the synced preference (orbital.translateTo), shown at once and kept if Tana takes it

@@ -277,7 +277,7 @@ class SampleJourneyTest {
     @Test fun aLongPressOffersTheNodesActions() {
         launch()
         compose.onNode(hasText("Draft the Q4 hiring plan") and hasClickAction()).performTouchInput { longClick() }
-        compose.waitUntil(5000) { seen("Pin to Today") }
+        compose.waitUntil(5000) { seen("Pin to …") }
         listOf("Assign to …", "Mark as Sensitive", "Delete").forEach { compose.onNodeWithText(it).assertExists() }
     }
 

@@ -101,9 +101,8 @@ extension View {
                     Button("Assign to …", systemImage: "person.crop.circle") { engine.assigning = .init(id: id, current: assignees, people: task != nil, then: done) }
                 }
                 if let task, task != "proposed" { Button("Move to Inbox", systemImage: "tray") { Task { await engine.moveToInbox(id); await done() } } }
-                let pinned = engine.pinned.contains(id), secret = engine.sensitiveIds.contains(id)
-                // pinned to any day: only taking the pin off
-                Button(pinned ? "Remove Pin" : "Pin to Today", systemImage: pinned ? "pin.slash" : "pin") { Task { await engine.pin(id, !pinned); await done() } }
+                let secret = engine.sensitiveIds.contains(id)
+                Menu { PinChoices(id: id, engine: engine, then: done) } label: { Label("Pin to …", systemImage: "pin") } // the days, as its page's pin menu
                 Button(secret ? "Not Sensitive" : "Mark as Sensitive", systemImage: secret ? "eye" : "eye.slash") { Task { await engine.markSensitive(id, !secret); await done() } }
                 Divider()
                 Button("Delete", systemImage: "trash", role: .destructive) { Task { if await engine.remove(id) { await done() } } }
