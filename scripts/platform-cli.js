@@ -454,17 +454,18 @@ const commands = {
     const n = readNode(doc);
     out({ ...(await workflowOf(doc)), ...(n.type === 'type' ? {} : { stateType: n.stateType, stateWorkflowStateId: n.stateWorkflowStateId }) });
   },
-  // addfield <type uri> <title> [--type member|date|link|options] [--multiple] [--options "A|B"] [--to <type uri>,…]:
+  // addfield <type uri> <title> [--as member|date|link|options] [--multiple] [--options "A|B"] [--to <type uri>,…]:
+  // --as, since Chromium reads a --type switch as its own process type and the network service aborts on it
   // define a field on a type (sdk/fields.js)
   async addfield() {
     const [typeUri, title] = positional;
-    if (!typeUri || !title) throw new Error('usage: addfield <tana:type:...> <title> [--type member|date|link|options] [--multiple] [--options "A|B"] [--to tana:type:...,...]');
+    if (!typeUri || !title) throw new Error('usage: addfield <tana:type:...> <title> [--as member|date|link|options] [--multiple] [--options "A|B"] [--to tana:type:...,...]');
     await connect();
     await client.sync.connect();
     const doc = await client.sync.subscribe(typeUri);
     if (doc.data.get('type') !== 'type') throw new Error(typeUri + ' is not a type');
     const sdkFields = require('../sdk/fields');
-    const key = sdkFields.addField(doc, { title, type: flag('type') || undefined, cardinality: args.includes('--multiple') ? 'multiple' : 'single',
+    const key = sdkFields.addField(doc, { title, type: flag('as') || undefined, cardinality: args.includes('--multiple') ? 'multiple' : 'single',
       options: flag('options') !== undefined ? flag('options').split('|') : undefined, to: flag('to') !== undefined ? flag('to').split(',') : undefined });
     await new Promise((r) => setTimeout(r, 1500)); // let the live update go out
     out(key + ' ' + JSON.stringify(sdkFields.definitions(doc)));
@@ -1041,7 +1042,7 @@ commands.setfield = async () => {
   const ref = (line) => { const m = /^\[(.*)\]\((tana:[^)]+)\)$/.exec(line); return m ? [{ mention: { label: m[1], uri: m[2] } }] : line; };
   const value = lines.map((line) => (line.startsWith('- ') ? { segments: ref(line.slice(2)), block: 'bullet' } : { segments: ref(line), block: 'paragraph' }));
   const types = {}; // what each referenced document is typed as, for the link-target check
-  for (const line of value) for (const s of Array.isArray(line.segments) ? line.segments : []) types[s.mention.uri] = (await client.sync.subscribe(s.mention.uri)).data.get('entityTypeUri');
+  for (const line of value) for (const s of Array.isArray(line.segments) ? line.segments : []) if (!require('../sdk/dates').isDateUri(s.mention.uri)) types[s.mention.uri] = (await client.sync.subscribe(s.mention.uri)).data.get('entityTypeUri'); // a date is no document
   await main.op(id, (doc) => sdkFields.setFieldText(doc, key, value, { field, typeOf: (uri) => types[uri] }));
   await new Promise((r) => setTimeout(r, 1500)); // the local update leaves with the stream, like the other write commands
   out(sdkFields.readFields(await client.sync.subscribe(id)));
@@ -1426,7 +1427,7 @@ const USAGE = [
   '             datemention [--date YYYY-MM-DD]   (a scratch document mentioning the date, read back and deleted) |',
   '             proposalcycle   (a scratch chat proposing two scratch documents, one approved and one rejected, read back and deleted) |',
   '             approve <chat id> <proposed id> | reject <chat id> <proposed id>   (an AI proposal: accepted, or removed and its draft deleted) |',
-  '             addfield <type uri> <title> [--type member|date|link|options] [--options "A|B"] [--to <type uri>,…] [--multiple] |',
+  '             addfield <type uri> <title> [--as member|date|link|options] [--options "A|B"] [--to <type uri>,…] [--multiple] |',
   '             set-state <id> <proposed|open|closed|not_now|workflow state> | pin <id> <sidebar|today|shared|mute> | unpin <id> <…same> |',
   '             pinto <event|space id> <id> | unpinfrom <event|space id> <id> | settype <id> <tana:type:...|none> |',
   '             set-hue <type uri> <0-360|none> | discusswith <id> <who…> | setfield <id> <type uri?attribute=key> <line…> |',

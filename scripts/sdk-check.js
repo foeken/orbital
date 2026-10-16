@@ -1792,6 +1792,17 @@ async function main() {
   const ListReq = message('graph', 'ListNodesRequest');
   const list = fromJson(ListReq, { nodeTypes: ['text'], assignedTo: [ME], stateTypes: ['open'], limit: 500, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
   assert.equal(list.sortOptions[0].field, 2);
+  // the bundle of 2026-10-16: due dates on the graph (filters, the sort, a node's due), live access changes on the
+  // stream, and the ACL service. Live 2026-10-16 the filters are honoured and nothing a client writes fills them yet.
+  const dueReq = { dueMin: '2026-10-01T00:00:00Z', dueZone: 'Europe/Amsterdam', sortOptions: [{ field: 'SORT_FIELD_DUE', direction: 'SORT_DIRECTION_ASCENDING' }] };
+  assert.equal(fromJson(ListReq, dueReq).sortOptions[0].field, 7, 'sort by due');
+  assert.deepEqual(toJson(ListReq, fromBinary(ListReq, toBinary(ListReq, fromJson(ListReq, dueReq)))), dueReq, 'the due filter round-trips');
+  const GNode = message('graph', 'Node'), dueNode = { id: DOC, due: { at: '2026-10-21', timezone: 'Europe/Amsterdam' } };
+  assert.deepEqual(toJson(GNode, fromBinary(GNode, toBinary(GNode, fromJson(GNode, dueNode)))), dueNode, 'a node\u2019s due');
+  const Frame = message('sync', 'ServerSyncResponse');
+  const frame = fromBinary(Frame, toBinary(Frame, fromJson(Frame, { documentAccessChanged: { documentId: DOC, sessionId: 's1', access: { actions: ['read'] } } })));
+  assert.equal(frame.responseUnion.case, 'documentAccessChanged', 'an access change is a frame of its own, which sync.js leaves alone');
+  assert.deepEqual(require('../sdk/proto/descriptors').ACLService.methods.map((m) => m.name), ['CheckAccess', 'CheckCIDAccess', 'FindMissingReaders', 'BatchCheckAccess']);
   console.log('ok  proto round-trips');
 
   {
