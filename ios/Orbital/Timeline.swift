@@ -151,7 +151,7 @@ struct Redacted: TextRenderer {
 struct TimelineScreen: View {
     let engine: Engine
     var tasks: Shell.Page? // the saved search of tasks, its own column when there is room (Shell)
-    @Binding var wide: Bool // room for two columns (an unfolded iPhone Duo): the Timeline left, the tasks right
+    let wide: Bool // room for two columns (an unfolded iPhone Duo, Shell.wide): the Timeline left, the tasks right
     let ask: (String) async throws -> String? // Ask Tana, under the tasks column when there are two (Shell has it under the page otherwise)
     let add: () -> Void // Quick Add, the + beside Ask Tana there
     @State private var shown = true // the rows: hidden while the skeleton is up, and in only once it has gone
@@ -182,7 +182,6 @@ struct TimelineScreen: View {
                 timeline
             }
         }
-        .onGeometryChange(for: Bool.self) { Shell.wide($0.size) } action: { wide = $0 }
         // the screen's middle, counting what the safe area takes on either side (the Duo's toolbar down the right edge)
         .onGeometryChange(for: CGFloat.self) { ($0.size.width + $0.safeAreaInsets.trailing - $0.safeAreaInsets.leading) / 2 } action: { half = $0 }
         .listStyle(.plain)

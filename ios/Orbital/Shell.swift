@@ -21,7 +21,6 @@ struct Shell: View {
     @State private var icons: [String: UIImage] = [:] // saved search id -> the icon it was given in Orbital
     @State private var secret: Set<String> = [] // the saved searches marked sensitive, drawn so in the menu too
     @State private var menu = false
-    @State private var split = false // the Timeline in two columns (TimelineScreen): Ask Tana goes under the tasks column
     @State private var settings = CommandLine.arguments.contains("-settings") // -settings: open, for design shots
     @State private var adding = CommandLine.arguments.contains("-add") // Quick Add Task; -add: open, for design shots
     @State private var shared: Shared? // shared to Orbital: Quick Add opened with it
@@ -33,8 +32,9 @@ struct Shell: View {
         GeometryReader { proxy in
             let inset = proxy.safeAreaInsets
             let screen = CGSize(width: proxy.size.width + inset.leading + inset.trailing, height: proxy.size.height + inset.top + inset.bottom)
-            // front: one page on a screen as square as an iPhone Duo's (no other iPhone is wider than 0.6 of its height)
-            let wide = Self.wide(proxy.size), front = !wide && screen.width / screen.height > 0.6
+            // front: one page on a screen as square as an iPhone Duo's, either way up (any other iPhone's short side is
+            // under 0.6 of its long one)
+            let wide = Self.wide(screen), front = !wide && min(screen.width, screen.height) / max(screen.width, screen.height) > 0.6
             // corner: + at the bottom right, beside Ask Tana, where iOS keeps no side strip: two columns, or an unfolded
             // iPhone Duo upright (its long side about 890 pt; the front screen's is under 700)
             content(menuWidth: Self.menuWidth(for: proxy.size.width), wide: wide, front: front,
@@ -42,9 +42,13 @@ struct Shell: View {
         }
     }
 
-    // Two columns: an iPhone Duo unfolded and held sideways (or a phone on its side). Upright, or the front screen either
-    // way, one page. By the room SwiftUI gives the page, not by device model.
-    static func wide(_ size: CGSize) -> Bool { size.width > size.height && size.width >= 800 }
+    // Two columns: the whole screen on its side, at least 800 by 600 pt: an iPhone Duo unfolded (951 by 669 pt).
+    // Upright, the front screen either way and any other iPhone on its side (440 pt tall at most): one page. By the room
+    // the screen gives, not by device model.
+    static func wide(_ screen: CGSize) -> Bool { screen.width > screen.height && screen.width >= 800 && screen.height >= 600 }
+
+    // the saved search of tasks the Timeline sets beside it when wide: the one called Tasks, else the menu's first
+    private var tasks: Page? { searches.first { $0.title.localizedCaseInsensitiveCompare("Tasks") == .orderedSame } ?? searches.first }
 
     // The menu keeps its familiar 300 pt phone width, but grows with a wide window so the page and menu both retain
     // useful room after a rotation or a fold. This is about the space SwiftUI gives us, not a list of device models.
@@ -67,14 +71,14 @@ struct Shell: View {
                     Group {
                         switch page {
                         // the Tasks search beside the Timeline when there is room, else the first search in the menu
-                        case .timeline: TimelineScreen(engine: engine, tasks: searches.first { $0.title.localizedCaseInsensitiveCompare("Tasks") == .orderedSame } ?? searches.first, wide: $split, ask: ask, add: { adding = true })
+                        case .timeline: TimelineScreen(engine: engine, tasks: tasks, wide: wide, ask: ask, add: { adding = true })
                         case .search(let id, _): NodeScreen(engine: engine, id: id, titled: false).id(id)
                         }
                     }
                     // front: under the side strip, empty down there, so it sits as far from the screen's right edge as its left
                     // corner: + beside it at the bottom right (CornerAdd)
                     .safeAreaInset(edge: .bottom) {
-                        if !(split && page == .timeline) {
+                        if !(wide && page == .timeline && tasks != nil) { // two columns: under the tasks column (TimelineScreen)
                             HStack(alignment: .bottom, spacing: 0) {
                                 Composer(lifts: !corner, send: ask).ignoresSafeArea(.container, edges: front ? .trailing : [])
                                 if corner { CornerAdd(engine: engine) { adding = true } }
