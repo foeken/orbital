@@ -65,5 +65,13 @@ final class SpecTests: XCTestCase {
         }
         for (kind, glyph) in p["glyphs"] as? [String: String] ?? [:] { XCTAssertEqual(Glyph.of(kind), glyph, kind) }
         for (icon, glyph) in p["markers"] as? [String: String] ?? [:] { XCTAssertEqual(Glyph.marker(icon), glyph, icon) }
+        for c in p["pins"] as? [[String: Any]] ?? [] {
+            let days = c["days"] as? [String] ?? [], today = string(c["today"])!, tomorrow = string(c["tomorrow"])!
+            let choices = Phrases.pinChoices(days, today: today, tomorrow: tomorrow)
+            XCTAssertEqual(choices.map(\.day), (c["choices"] as? [[Any]] ?? []).map { $0[0] as? String ?? "" }, "\(days)")
+            XCTAssertEqual(choices.map(\.on), (c["choices"] as? [[Any]] ?? []).map { $0[1] as? Bool ?? false }, "\(days)")
+            XCTAssertEqual(choices.map { Phrases.pinDay($0.day, today: today, tomorrow: tomorrow) }, c["words"] as? [String])
+            XCTAssertEqual(Phrases.pinnedTo(days, today: today, tomorrow: tomorrow), string(c["said"]))
+        }
     }
 }

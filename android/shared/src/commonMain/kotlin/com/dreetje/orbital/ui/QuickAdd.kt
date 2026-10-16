@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -285,6 +286,23 @@ fun Choices(title: String, none: String, load: suspend (String) -> List<Member>,
             }
         }
     }
+}
+
+// A pin menu's Pick a Date … (Pages.swift PinDaySheet): a day from today on, pinned with Pin (Engine.pinDay)
+@Composable
+fun PinDayDialog(engine: Engine, picking: Engine.PickingDay, onDismiss: () -> Unit) {
+    val from = LocalDate.parse(Times.key(engine.now())).atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds() // the picker counts in UTC
+    val state = rememberDatePickerState(initialSelectedDateMillis = from + 2 * 86_400_000L,
+        selectableDates = object : SelectableDates { override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis >= from })
+    DatePickerDialog(onDismiss, confirmButton = {
+        TextButton({
+            state.selectedDateMillis?.let { ms ->
+                val day = Instant.fromEpochMilliseconds(ms).toLocalDateTime(TimeZone.UTC).date.toString()
+                engine.scope.launch { engine.pinDay(picking.id, day, true); picking.then() }
+            }
+            onDismiss()
+        }) { Text("Pin") }
+    }, dismissButton = { TextButton(onDismiss) { Text("Cancel") } }) { DatePicker(state) }
 }
 
 // Long press, Assign to …: your Dot on top (each agent linked through orbital.md that is on, the default first), then the

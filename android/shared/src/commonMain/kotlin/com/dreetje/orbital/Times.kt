@@ -6,6 +6,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.Month
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.abs
 import kotlin.time.Duration.Companion.minutes
@@ -16,6 +17,10 @@ import kotlin.time.Instant
 // (ios/engine/labels.js, Row.Info), as the desktop words them; only the invented sample, which never passes through
 // it, is worded here (sample).
 object Times {
+    // a day as the engine keys it (YYYY-MM-DD, this phone's date), days on from now: today, tomorrow (Day.key on the iPhone)
+    fun key(now: Instant, days: Int = 0, zone: TimeZone = TimeZone.currentSystemDefault()): String =
+        now.toLocalDateTime(zone).date.plus(days, DateTimeUnit.DAY).toString()
+
     // the rail's clock as the desktop's (renderer/timeline.js timelineTime): 24-hour and two digits, so a column lines up
     fun hm(at: Instant, zone: TimeZone = TimeZone.currentSystemDefault()): String {
         val t = at.toLocalDateTime(zone)

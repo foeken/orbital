@@ -155,6 +155,7 @@ struct Shell: View {
             for t in Writes.take() { page = .timeline; path = []; Task { await engine.tick(t.id, to: t.to) } }
         }
         .sheet(item: Binding { engine.assigning } set: { engine.assigning = $0 }) { AssignSheet(engine: engine, task: $0) }
+        .sheet(item: Binding { engine.pickingDay } set: { engine.pickingDay = $0 }) { PinDaySheet(engine: engine, picking: $0) } // a pin menu's Pick a Date …
         .sheet(item: Binding { engine.handing } set: { engine.handing = $0 }) { HandSheet(engine: engine, handing: $0) } // Assign to your Dot (Agents.swift)
         .shareAsk(engine)
         .task {

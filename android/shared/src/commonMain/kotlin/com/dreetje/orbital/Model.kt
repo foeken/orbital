@@ -88,7 +88,7 @@ fun parseTime(s: String): Instant? = runCatching { Instant.parse(s) }.getOrNull(
                               val summary: List<Row>? = null, val notes: List<Row>? = null, val attendees: List<Row.Person>? = null)
 
 // What a refresh reads besides the rows (orbital.setup)
-@Serializable data class Setup(val to: String? = null, val ai: Map<String, String> = emptyMap(), val sensitive: List<String> = emptyList(), val pinned: List<String> = emptyList(),
+@Serializable data class Setup(val to: String? = null, val ai: Map<String, String> = emptyMap(), val sensitive: List<String> = emptyList(), val pinned: List<String> = emptyList(), val days: Map<String, List<String>> = emptyMap(),
                                val agents: List<Agent>? = null, val handed: Map<String, String>? = null)
 
 // Your Dot (ios/engine/agents.js, ui/Agents.kt): the agents linked through orbital.md, a node's agent and its last Agent status

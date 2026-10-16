@@ -587,6 +587,115 @@
    "apply": "calendar",
    "updated": "updated",
    "meeting": "calendar"
-  }
+  },
+  "pins": [
+   {
+    "days": [
+     "2026-10-16",
+     "2026-10-23"
+    ],
+    "today": "2026-10-16",
+    "tomorrow": "2026-10-17",
+    "choices": [
+     [
+      "2026-10-16",
+      true
+     ],
+     [
+      "2026-10-17",
+      false
+     ],
+     [
+      "2026-10-23",
+      true
+     ]
+    ],
+    "words": [
+     "Today",
+     "Tomorrow",
+     "Fri 23 Oct"
+    ],
+    "said": "Pinned to today and Fri 23 Oct"
+   },
+   {
+    "days": [
+     "2026-10-01"
+    ],
+    "today": "2026-10-16",
+    "tomorrow": "2026-10-17",
+    "choices": [
+     [
+      "2026-10-16",
+      false
+     ],
+     [
+      "2026-10-17",
+      false
+     ]
+    ],
+    "words": [
+     "Today",
+     "Tomorrow"
+    ],
+    "said": null
+   },
+   {
+    "days": [
+     "2026-11-02",
+     "2026-10-17",
+     "2026-10-16",
+     "2026-10-17"
+    ],
+    "today": "2026-10-16",
+    "tomorrow": "2026-10-17",
+    "choices": [
+     [
+      "2026-10-16",
+      true
+     ],
+     [
+      "2026-10-17",
+      true
+     ],
+     [
+      "2026-11-02",
+      true
+     ]
+    ],
+    "words": [
+     "Today",
+     "Tomorrow",
+     "Mon 2 Nov"
+    ],
+    "said": "Pinned to today, tomorrow and Mon 2 Nov"
+   },
+   {
+    "days": [
+     "2027-02-28"
+    ],
+    "today": "2026-10-16",
+    "tomorrow": "2026-10-17",
+    "choices": [
+     [
+      "2026-10-16",
+      false
+     ],
+     [
+      "2026-10-17",
+      false
+     ],
+     [
+      "2027-02-28",
+      true
+     ]
+    ],
+    "words": [
+     "Today",
+     "Tomorrow",
+     "Sun 28 Feb"
+    ],
+    "said": "Pinned to Sun 28 Feb"
+   }
+  ]
  }
 }

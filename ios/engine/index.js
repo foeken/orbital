@@ -479,6 +479,7 @@ window.orbital = {
     refreshSoon(); // the linked agents, asked of the MCP server now and then: what it answers is in the next setup
     return JSON.stringify({ to: LANGS.includes(to) ? to : null, ai: Object.fromEntries(Object.entries(settings.AI_KEYS).map(([k, s]) => [k, settings.get(s)]).filter(([, v]) => typeof v === 'string')),
       sensitive: [...secret()], pinned: Object.keys(pins).filter((id) => pins[id].length), // pinned to any day
+      days: pins, // { id: ['YYYY-MM-DD'] }: every day each is pinned to, for a node's pin menu
       agents: linked(), handed: handed() }); // your Dot and what it has, for the long press
   },
   // What the phone asks ChatGPT with, as the Mac does (main/prompts.js): Auto-translate's instructions and the answer's
@@ -496,6 +497,11 @@ window.orbital = {
     // off: every day it is pinned to, so Remove Pin takes it out of Pinned and Today's Tasks wherever it was pinned
     const days = on ? [today()] : (await within('date pins', datePins(S.client.sync, S.me.userUri)))[id] || [];
     for (const day of days) await within('date pins', (on ? pinDate : unpinDate)(S.client.sync, S.me.userUri, id, day));
+    return JSON.stringify(on);
+  },
+  // A node's pin menu: one day pinned or taken off, as the Mac's date pins do (main/pins.js setPin); pinDate checks the day
+  async pinDay(id, day, on) {
+    await within('date pins', (on ? pinDate : unpinDate)(S.client.sync, S.me.userUri, id, day));
     return JSON.stringify(on);
   },
   async sensitive(id, on) {
@@ -578,7 +584,7 @@ window.orbital = {
   ...agents({ hold, settled }),
 };
 // Demo mode saves nothing, as the desktop's (renderer/state.js DEMO_WRITES): every write refused, whoever asks
-for (const name of ['toggle', 'assign', 'share', 'translateTo', 'aiChoice', 'ask', 'send', 'remove', 'pin', 'sensitive', 'createTask', 'fromImage', 'linkCode', 'handTo', 'unhand', 'unlink']) {
+for (const name of ['toggle', 'assign', 'share', 'translateTo', 'aiChoice', 'ask', 'send', 'remove', 'pin', 'pinDay', 'sensitive', 'createTask', 'fromImage', 'linkCode', 'handTo', 'unhand', 'unlink']) {
   const write = window.orbital[name];
   window.orbital[name] = (...args) => (isDemo() ? Promise.reject(new Error('Demo mode is on: nothing is saved to Tana')) : write(...args));
 }

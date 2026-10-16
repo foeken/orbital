@@ -32,6 +32,9 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -68,6 +71,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -159,7 +163,10 @@ fun NodeScreen(
     val current = page
     val hiddenPage = current?.sensitive == true && !engine.reveal
     Column(modifier.fillMaxSize()) {
-        if (titled) PageBar(if (hiddenPage) "" else engine.translator.words(current?.title ?: "", current?.sensitive == true).first, onBack = onBack)
+        // a document's pins: the days it is pinned to under its title, and the pin menu at the top right (PinButton)
+        val pins = access?.let { Phrases.pinnedTo(engine.days[id] ?: emptyList(), Times.key(engine.now()), Times.key(engine.now(), 1)) }
+        if (titled) PageBar(if (hiddenPage) "" else engine.translator.words(current?.title ?: "", current?.sensitive == true).first, onBack = onBack,
+            subtitle = pins, action = if (access != null) ({ PinButton(id, engine) { load() } }) else null)
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
                 current != null && hiddenPage -> Empty("Hidden", "You marked this sensitive in Orbital. Shake your phone or turn on Show sensitive items in Settings to see it, and do the same again to hide it.", glyph = "hidden")
@@ -383,15 +390,7 @@ fun NodeDetails(id: String, access: Access, engine: Engine, open: () -> Unit, re
         Field("Visible to", open) {
             if (access.audience == "people" && access.people.isNotEmpty()) Faces(access.people.persons) else AudienceLabel(access.audience, access.space)
         }
-        // pinned to today, or the pin taken off whatever day it is on, as the long press does it (Engine.pin): an outside
-        // orbital:pin: link opens the node here (ui/Shell.kt Link), so the pin is made where you see it
-        val pinned = id in engine.pinned
-        Row(Modifier.fillMaxWidth().clickable { engine.scope.launch { engine.pin(id, !pinned) } }.semantics { role = Role.Button }.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Glyph("pinDate", Modifier.size(18.dp), c.text) // the desktop's pin-to-a-day glyph, as the iPhone draws it
-            Text(if (pinned) "Remove Pin" else "Pin to Today", color = c.text)
-        }
-        HorizontalDivider(color = c.separator)
+        // its pins are the pin menu in the top bar (NodeScreen, PinButton); an outside orbital:pin: link opens the node there
         // handed to your Dot (Agents.kt): its name and its last Agent status line; a tap asks it again or takes it back
         access.agent?.let { held ->
             var menu by remember { mutableStateOf(false) }
@@ -411,6 +410,45 @@ fun NodeDetails(id: String, access: Access, engine: Engine, open: () -> Unit, re
             }
             HorizontalDivider(color = c.separator)
         }
+    }
+}
+
+// a field as the desktop draws one: its name in grey, its value after it, a line under it, the whole row the button
+// The top bar's pin button on a document's page (Pages.swift NodeScreen): the pin menu, the glyph in the text colour
+// while it is pinned from today on
+@Composable
+fun PinButton(id: String, engine: Engine, then: suspend () -> Unit) {
+    val c = Theme.colors
+    var open by remember { mutableStateOf(false) }
+    val ahead = Phrases.pinnedTo(engine.days[id] ?: emptyList(), Times.key(engine.now()), Times.key(engine.now(), 1))
+    Box {
+        IconButton({ open = true }, Modifier.semantics { stateDescription = ahead ?: "Not pinned" }) {
+            Glyph("pinDate", Modifier.size(20.dp), if (ahead == null) c.secondary else c.text, description = "Pin")
+        }
+        DropdownMenu(open, { open = false }) { PinChoices(id, engine, { open = false }, then) }
+    }
+}
+
+// A node's pin menu: today, tomorrow and each later day it is pinned to, ticked where it is (Phrases.pinChoices), then
+// Pick a Date … and Remove All Pins. The pin button at the top of its page and the long press's Pin to … both show it
+// (Pages.swift PinChoices).
+@Composable
+fun PinChoices(id: String, engine: Engine, close: () -> Unit, then: suspend () -> Unit = {}) {
+    val c = Theme.colors
+    val days = engine.days[id] ?: emptyList()
+    val today = Times.key(engine.now())
+    val tomorrow = Times.key(engine.now(), 1)
+    val run: (suspend () -> Unit) -> () -> Unit = { act -> { close(); engine.scope.launch { act(); then() } } }
+    Phrases.pinChoices(days, today, tomorrow).forEach { (day, on) ->
+        DropdownMenuItem({ Text(Phrases.pinDay(day, today, tomorrow), color = c.text) }, run { engine.pinDay(id, day, !on) },
+            trailingIcon = if (on) ({ Icon(Icons.Outlined.Check, "Pinned", tint = c.text) }) else null)
+    }
+    HorizontalDivider(color = c.separator)
+    DropdownMenuItem({ Text("Pick a Date …", color = c.text) }, { close(); engine.pickingDay = Engine.PickingDay(id, then) },
+        leadingIcon = { Icon(Icons.Outlined.CalendarMonth, null, tint = c.text) })
+    if (days.isNotEmpty()) {
+        HorizontalDivider(color = c.separator)
+        DropdownMenuItem({ Text("Remove All Pins", color = c.danger) }, run { engine.pin(id, false) }, leadingIcon = { Icon(Icons.Outlined.PushPin, null, tint = c.danger) })
     }
 }
 

@@ -68,6 +68,9 @@ class Engine(
         private set
     var pinned by mutableStateOf(setOf<String>()) // pinned to a day, any day, for the long-press menu
         private set
+    var days by mutableStateOf(mapOf<String, List<String>>()) // node -> every day it is pinned to (YYYY-MM-DD), for its pin menu (PinChoices)
+        private set
+    var pickingDay by mutableStateOf<PickingDay?>(null) // Pick a Date …: the node whose date picker is open (laid over everything by the Shell)
     var agents by mutableStateOf(listOf<Agent>()) // your Dot and any other agent linked through orbital.md (ui/Agents.kt), for the long-press menu
         private set
     var handed by mutableStateOf(mapOf<String, String>()) // node -> the linked agent it is handed to
@@ -102,6 +105,7 @@ class Engine(
 
     // people: false on a node that is not a task, whose Assign to lists only your agents
     data class Assigning(val id: String, val current: List<String>?, val then: suspend () -> Unit, val people: Boolean = true)
+    data class PickingDay(val id: String, val then: suspend () -> Unit)
     data class Handing(val id: String, val agent: Agent, val then: suspend () -> Unit)
     data class ShareAsk(val id: String, val access: Access, val shut: List<Member>, val then: suspend () -> Unit)
     class Shared(val text: String?, val image: ByteArray?) {
@@ -320,6 +324,7 @@ class Engine(
                 loadPrompts()
                 sensitiveIds = setup.sensitive.toSet()
                 pinned = setup.pinned.toSet()
+                days = setup.days
                 setup.agents?.let { agents = it }
                 setup.handed?.let { handed = it }
             }
@@ -370,7 +375,7 @@ class Engine(
     // what was the last account's and would otherwise be offered to the next: a task Tana did not take (Quick Add would
     // make it in the other account), a request your agent did not take, the agents and their nodes, the marks and pins
     private fun forgetAccount() {
-        unsent.clear(); unhanded.clear(); agents = emptyList(); handed = emptyMap(); sensitiveIds = emptySet(); pinned = emptySet(); unpinned = emptySet()
+        unsent.clear(); unhanded.clear(); agents = emptyList(); handed = emptyMap(); sensitiveIds = emptySet(); pinned = emptySet(); days = emptyMap(); unpinned = emptySet()
     }
 
     // Your saved searches, those pinned to your sidebar first (orbital.searches)
@@ -451,9 +456,24 @@ class Engine(
     // after says where it is now.
     suspend fun pin(id: String, on: Boolean) {
         val was = pinned
+        val wasDays = days
         pinned = if (on) pinned + id else pinned - id
+        days = if (on) days + (id to ((days[id] ?: emptyList()) + Times.key(now())).distinct().sorted()) else days - id
         if (!on) unpinned = unpinned + id
-        if (!act("return await orbital.pin(id, on)", mapOf("id" to id, "on" to on))) pinned = was
+        if (!act("return await orbital.pin(id, on)", mapOf("id" to id, "on" to on))) { pinned = was; days = wasDays }
+        unpinned = unpinned - id
+    }
+
+    // A node's pin menu (PinChoices): one day pinned or taken off, shown at once and put back when Tana says no. Today
+    // taken off leaves Today's Tasks at once, as Remove All Pins does.
+    suspend fun pinDay(id: String, day: String, on: Boolean) {
+        val was = pinned
+        val wasDays = days
+        val list = (days[id] ?: emptyList()).let { if (on) (it + day).distinct().sorted() else it - day }
+        days = if (list.isEmpty()) days - id else days + (id to list)
+        pinned = if (list.isEmpty()) pinned - id else pinned + id
+        if (!on && day == Times.key(now())) unpinned = unpinned + id
+        if (!act("return await orbital.pinDay(id, day, on)", mapOf("id" to id, "day" to day, "on" to on))) { pinned = was; days = wasDays }
         unpinned = unpinned - id
     }
 

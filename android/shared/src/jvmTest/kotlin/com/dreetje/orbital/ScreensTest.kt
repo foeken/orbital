@@ -167,7 +167,7 @@ class ScreensTest {
 
     @Test fun aLongPressOffersTheNodesActions() = sample {
         onNode(hasText("Draft the Q4 hiring plan") and androidx.compose.ui.test.hasClickAction()).performTouchInput { longClick() }
-        waitUntil(timeoutMillis = 3000) { onAllWithText("Pin to Today").isNotEmpty() }
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Pin to …").isNotEmpty() }
         listOf("Assign to …", "Mark as Sensitive", "Delete").forEach { onNodeWithText(it).assertExists() }
     }
 
@@ -178,7 +178,7 @@ class ScreensTest {
         onNode(hasText("Priya Shah completed", substring = true) and androidx.compose.ui.test.hasClickAction()).performTouchInput { longClick() }
         mainClock.advanceTimeBy(1000)
         waitForIdle()
-        assertTrue(onAllWithText("Pin to Today").isEmpty(), "no actions on an entry")
+        assertTrue(onAllWithText("Pin to …").isEmpty(), "no actions on an entry")
     }
 
     // Settings' Agents has Connect your personal agent (Agents.kt): the ? beside Add both plugins opens the help with
@@ -212,16 +212,24 @@ class ScreensTest {
         kotlin.test.assertEquals("closed", engine.states[task])
     }
 
-    // a zoomed node's Pin to Today, where an outside orbital:pin: link now lands: pinned at once, then Remove Pin
-    @Test fun aZoomedNodePinsToTodayAndBack() = sample { engine ->
+    // a zoomed node's pin menu at the top right, where an outside orbital:pin: link now lands (PinButton): Today ticked on,
+    // said under the title, then Remove All Pins takes every day off
+    @Test fun aZoomedNodesPinMenuPinsTodayAndRemovesAll() = sample { engine ->
         val task = "tana:text:000000000000000000000000v6"
         engine.link = Engine.Opened("orbital:$task", own = true)
-        waitUntil(timeoutMillis = 5000) { onAllWithText("Pin to Today").isNotEmpty() }
-        onNodeWithText("Pin to Today").performClick()
-        waitUntil(timeoutMillis = 3000) { onAllWithText("Remove Pin").isNotEmpty() }
+        waitUntil(timeoutMillis = 5000) { onAllNodes(hasContentDescription("Pin")).fetchSemanticsNodes().isNotEmpty() }
+        onNode(hasContentDescription("Pin")).performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Tomorrow").isNotEmpty() }
+        onNodeWithText("Pick a Date …").assertExists()
+        assertTrue(onAllWithText("Remove All Pins").isEmpty(), "nothing to remove yet")
+        onNodeWithText("Today").performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Pinned to today").isNotEmpty() }
         assertTrue(task in engine.pinned)
-        onNodeWithText("Remove Pin").performClick()
-        waitUntil(timeoutMillis = 3000) { onAllWithText("Pin to Today").isNotEmpty() }
+        onNode(hasContentDescription("Pin")).performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Remove All Pins").isNotEmpty() }
+        onNodeWithText("Remove All Pins").performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Pinned to today").isEmpty() }
+        assertTrue(task !in engine.pinned)
     }
 
     // the saved Timeline at launch, Tana not connected yet: more days wait for it, greyed rather than a tap that does nothing

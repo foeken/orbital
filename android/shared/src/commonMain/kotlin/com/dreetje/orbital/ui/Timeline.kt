@@ -498,6 +498,7 @@ fun NodeMenu(
     content: @Composable () -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
+    var pins by remember { mutableStateOf(false) } // Pin to …: the menu shows the pin choices in its place (PinChoices)
     val haptic = LocalHapticFeedback.current
     val node = id?.takeIf { it.startsWith("tana:") }
     Box(modifier.combinedClickable(
@@ -507,16 +508,15 @@ fun NodeMenu(
         onLongClick = if (node != null) ({ haptic.performHapticFeedback(HapticFeedbackType.LongPress); open = true }) else null,
     )) {
         content()
-        if (node != null) DropdownMenu(open, { open = false }) {
+        if (node != null) DropdownMenu(open, { open = false; pins = false }) {
+            if (pins) { PinChoices(node, engine, { open = false; pins = false }, then); return@DropdownMenu }
             val run: (suspend () -> Unit) -> () -> Unit = { act -> { open = false; engine.scope.launch { act() } } }
             // a task's people, with your Dot on top (Agents.kt); a note has only your Dot to go to
             if (task != null || (handable(node) && engine.agentsOn.isNotEmpty()))
                 MenuItem("Assign to …", Icons.Outlined.AccountCircle, onClick = run { engine.assigning = Engine.Assigning(node, assignees, then, people = task != null) })
             if (task != null && task != "proposed") MenuItem("Move to Inbox", Icons.Outlined.MoveToInbox, onClick = run { engine.moveToInbox(node); then() })
-            val pinned = node in engine.pinned
             val secret = node in engine.sensitiveIds
-            // pinned to any day: only taking the pin off
-            MenuItem(if (pinned) "Remove Pin" else "Pin to Today", Icons.Outlined.PushPin, onClick = run { engine.pin(node, !pinned); then() })
+            MenuItem("Pin to …", Icons.Outlined.PushPin, onClick = { pins = true }) // the days, as its page's pin menu
             MenuItem(if (secret) "Not Sensitive" else "Mark as Sensitive", if (secret) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff, onClick = run { engine.markSensitive(node, !secret); then() })
             HorizontalDivider()
             MenuItem("Delete", Icons.Outlined.Delete, red = true, onClick = run { if (engine.remove(node)) then() })
