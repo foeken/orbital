@@ -86,7 +86,8 @@ struct NodeScreen: View {
                                     .listRowInsets(EdgeInsets(top: grouped ? 1 : 3, leading: 20, bottom: grouped ? 1 : 3, trailing: 16))
                             }
                         } header: {
-                            if let title = section.title { Text(title).font(.headline).foregroundStyle(.secondary).textCase(nil) }
+                            // in line with the rows: left to the system, a heading touched the Duo's column edge
+                            if let title = section.title { Text(title).font(.headline).foregroundStyle(.secondary).textCase(nil).listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 16)) }
                         }
                         .listSectionSeparator(.hidden)
                     }
@@ -118,7 +119,8 @@ struct NodeScreen: View {
         .onChange(of: engine.sensitiveIds) { Task { await load() } } // marked or unmarked on another device: drawn again
         // Demo mode turned on or off with this page open: read again, and none of the words read before it shown meanwhile
         .onChange(of: engine.demo) { page = nil; Task { await load() } }
-        .navigationTitle(titled && !(page?.sensitive == true && !engine.reveal) ? engine.translator.words(page?.title ?? "", sensitive: page?.sensitive == true).0 : "")
+        // untitled: no title at all, so the page around it keeps its own (the Timeline's tasks column)
+        .modifier(Titled(title: !titled ? nil : page?.sensitive == true && !engine.reveal ? "" : engine.translator.words(page?.title ?? "", sensitive: page?.sensitive == true).0))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: engine.phase) {
             guard engine.phase == .ready else { return }
@@ -158,6 +160,13 @@ struct NodeScreen: View {
     // the outline flattened, each row with how deep it sits: nothing folds on the phone, everything shows
     static func flat(_ rows: [Row], depth: Int = 0) -> [(row: Row, depth: Int)] {
         rows.filter { !$0.blank }.flatMap { [($0, depth)] + flat($0.children ?? [], depth: depth + 1) }
+    }
+}
+
+private struct Titled: ViewModifier {
+    let title: String?
+    func body(content: Content) -> some View {
+        if let title { content.navigationTitle(title) } else { content }
     }
 }
 

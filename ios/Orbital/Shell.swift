@@ -30,9 +30,25 @@ struct Shell: View {
     @Environment(\.colorScheme) private var scheme
     var body: some View {
         GeometryReader { proxy in
-            content(menuWidth: Self.menuWidth(for: proxy.size.width))
+            let inset = proxy.safeAreaInsets
+            let screen = CGSize(width: proxy.size.width + inset.leading + inset.trailing, height: proxy.size.height + inset.top + inset.bottom)
+            // front: one page on a screen as square as an iPhone Duo's, either way up (any other iPhone's short side is
+            // under 0.6 of its long one)
+            let wide = Self.wide(screen), front = !wide && min(screen.width, screen.height) / max(screen.width, screen.height) > 0.6
+            // corner: + at the bottom right, beside Ask Tana, where iOS keeps no side strip: two columns, or an unfolded
+            // iPhone Duo upright (its long side about 890 pt; the front screen's is under 700)
+            content(menuWidth: Self.menuWidth(for: proxy.size.width), wide: wide, front: front,
+                    corner: wide || (front && max(screen.width, screen.height) >= 800))
         }
     }
+
+    // Two columns: the whole screen on its side, at least 800 by 600 pt: an iPhone Duo unfolded (951 by 669 pt).
+    // Upright, the front screen either way and any other iPhone on its side (440 pt tall at most): one page. By the room
+    // the screen gives, not by device model.
+    static func wide(_ screen: CGSize) -> Bool { screen.width > screen.height && screen.width >= 800 && screen.height >= 600 }
+
+    // the saved search of tasks the Timeline sets beside it when wide: the one called Tasks, else the menu's first
+    private var tasks: Page? { searches.first { $0.title.localizedCaseInsensitiveCompare("Tasks") == .orderedSame } ?? searches.first }
 
     // The menu keeps its familiar 300 pt phone width, but grows with a wide window so the page and menu both retain
     // useful room after a rotation or a fold. This is about the space SwiftUI gives us, not a list of device models.
@@ -40,53 +56,60 @@ struct Shell: View {
         min(360, max(300, available * 0.4))
     }
 
-    private func content(menuWidth: CGFloat) -> some View {
-        ZStack(alignment: .leading) {
-            SideMenu(page: $page, searches: $searches, icons: icons, hidden: engine.reveal ? [] : secret, moved: saveOrder, close: { path = []; show(false) }, settings: { settings = true })
-                .frame(width: menuWidth)
-                .accessibilityHidden(!menu)
+    // front: an iPhone Duo's front screen, where the menu slides the page's content and leaves its frame, with iOS's side
+    // bar down the right edge, where it is. Moving the frame changed the room iOS lays that bar out in, and the buttons
+    // flashed back to the top bar each time it did.
+    private func content(menuWidth: CGFloat, wide: Bool, front: Bool, corner: Bool) -> some View {
+        let shift = min(menuWidth, max(0, (menu ? menuWidth : 0) + drag))
+        return ZStack(alignment: .leading) {
+            if !front { sideMenu(width: menuWidth, front: front) }
             NavigationStack(path: $path) {
-                Group {
-                    switch page {
-                    case .timeline: TimelineScreen(engine: engine)
-                    case .search(let id, _): NodeScreen(engine: engine, id: id, titled: false).id(id)
+                // front: the menu inside the page's frame, behind its content, which is what slides; outside, the frame
+                // (and its views, though they show nothing there) lay over the menu and took every tap
+                ZStack(alignment: .leading) {
+                    if front { sideMenu(width: menuWidth, front: front) }
+                    Group {
+                        switch page {
+                        // the Tasks search beside the Timeline when there is room, else the first search in the menu
+                        case .timeline: TimelineScreen(engine: engine, tasks: tasks, wide: wide, ask: ask, add: { adding = true })
+                        case .search(let id, _): NodeScreen(engine: engine, id: id, titled: false).id(id)
+                        }
                     }
+                    // front: under the side strip, empty down there, so it sits as far from the screen's right edge as its left
+                    // corner: + beside it at the bottom right (CornerAdd)
+                    .safeAreaInset(edge: .bottom) {
+                        if !(wide && page == .timeline && tasks != nil) { // two columns: under the tasks column (TimelineScreen)
+                            HStack(alignment: .bottom, spacing: 0) {
+                                Composer(lifts: !corner, send: ask).ignoresSafeArea(.container, edges: front ? .trailing : [])
+                                if corner { CornerAdd(engine: engine) { adding = true } }
+                            }
+                        }
+                    }
+                    // a bar of its own: what scrolls under the title fades out there, as under the top bar
+                    .safeAreaBar(edge: .top) {
+                        if front { Text(page.title).font(.headline).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20).padding(.vertical, 10).accessibilityAddTraits(.isHeader) }
+                    }
+                    .modifier(Card(on: front, open: menu, shift: shift, dark: scheme == .dark, close: { show(false) }))
                 }
-                .navigationDestination(for: String.self) { NodeScreen(engine: engine, id: $0, note: notes[$0], asked: asked[$0]) }
-                .navigationTitle(page.title)
+                // wide (an unfolded iPhone Duo): + at the bottom right, beside Ask Tana (CornerAdd). In the side strip it made
+                // the strip come and go as a node opened over it, and the bar jumped; a node's back button went down it too.
+                .modifier(TopBar(on: wide)) // wide: no side strip, the menu and back buttons in the top bar
+                .navigationDestination(for: String.self) { NodeScreen(engine: engine, id: $0, note: notes[$0], asked: asked[$0]).modifier(TopBar(on: wide)) }
+                .navigationTitle(front ? "" : page.title) // front: the title slides with the page, below
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button { show(true) } label: { Image(systemName: "line.3.horizontal") }.accessibilityLabel("Menu")
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { adding = true } label: { AddGlyph(busy: engine.adding > 0) }
-                            .accessibilityLabel("Quick Add Task").accessibilityValue(engine.adding > 0 ? "Adding" : "")
-                    }
+                    // An iPhone Duo's front screen: both down its side bar (left to iOS they flashed back to the top bar)
+                    #if compiler(>=6.4)
+                    if #available(iOS 27.1, *) {
+                        menuButton.axisBehavior(.verticalPreferred)
+                        if !corner { addButton.axisBehavior(.verticalPreferred) }
+                    } else { menuButton; if !corner { addButton } }
+                    #else
+                    menuButton; if !corner { addButton }
+                    #endif
                 }
-                .safeAreaInset(edge: .bottom) { Composer { let sent = try await engine.ask($0); notes[sent.id] = sent.warning; asked[sent.id] = .now; path.append(sent.id); return nil } } // a new chat, opened as it starts, its warning shown there
             }
-            .accessibilityHidden(menu) // with the menu open, VoiceOver reads the menu, not the page pushed aside
-            // the whole screen, status bar included: a clip to the page's own frame cut the top bar off
-            .mask { RoundedRectangle(cornerRadius: menu ? 44 : 0, style: .continuous).ignoresSafeArea() }
-            // pushed aside, the page is a card with a hairline edge, as the ChatGPT app's is; a tap closes it. (A sheet
-            // of glass over it was too much: the bar's own glass buttons became glass on glass.) Always there and only
-            // shown or hidden: added and removed, it faded out where it had been while the page slid home, a second edge
-            // lagging behind the first.
-            .overlay {
-                // a faint grey over the card in dark mode, so it reads as a sheet lifted off the black menu, as the
-                // ChatGPT app's does; in light mode the shadow does that
-                RoundedRectangle(cornerRadius: 44, style: .continuous).fill(Color.pair(0x000000, 0xffffff).opacity(scheme == .dark ? 0.08 : 0))
-                    .overlay { RoundedRectangle(cornerRadius: 44, style: .continuous).strokeBorder(Color(.separator), lineWidth: 1) }
-                    .ignoresSafeArea()
-                    .opacity(menu ? 1 : 0)
-                    .contentShape(Rectangle())
-                    .onTapGesture { show(false) }
-                    .allowsHitTesting(menu)
-                    .accessibilityHidden(true)
-            }
-            .shadow(color: .black.opacity(menu ? 0.12 : 0), radius: 24)
-            .offset(x: min(menuWidth, max(0, (menu ? menuWidth : 0) + drag)))
+            .modifier(Card(on: !front, open: menu, shift: shift, dark: scheme == .dark, close: { show(false) }))
         }
         .background(Color(.systemBackground))
         // A mention, a reference or a row anywhere zooms into its node: an orbital:<id> link (Row.zoom) is pushed here
@@ -154,6 +177,37 @@ struct Shell: View {
         withAnimation(reduceMotion ? nil : Self.move) { menu = open }
     }
 
+    private func sideMenu(width: CGFloat, front: Bool) -> some View {
+        SideMenu(page: $page, searches: $searches, icons: icons, hidden: engine.reveal ? [] : secret, moved: saveOrder, pick: { item in
+            if !path.isEmpty { path = [] }
+            // front: the new page once the old one has slid home. Swapped any sooner, the page came back shut at once,
+            // with no slide (the content slides inside the frame there, and a new page in it ended the move)
+            guard front, item != page else { page = item; show(false); return }
+            withAnimation(reduceMotion ? nil : Self.move, completionCriteria: .logicallyComplete) { menu = false } completion: { page = item }
+        }, settings: { settings = true })
+            .frame(width: width)
+            .accessibilityHidden(!menu)
+    }
+
+    private var menuButton: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            // in an iPhone Duo's side bar it stays in reach with the menu open: a second tap closes it
+            Button { show(!menu) } label: { Image(systemName: "line.3.horizontal") }.accessibilityLabel("Menu")
+        }
+    }
+
+    private var addButton: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button { adding = true } label: { AddGlyph(busy: engine.adding > 0) }
+                .accessibilityLabel("Quick Add Task").accessibilityValue(engine.adding > 0 ? "Adding" : "")
+        }
+    }
+
+    // Ask Tana: a new chat, opened as it starts, its warning shown there
+    private func ask(_ text: String) async throws -> String? {
+        let sent = try await engine.ask(text); notes[sent.id] = sent.warning; asked[sent.id] = .now; path.append(sent.id); return nil
+    }
+
     // The Share extension opens Orbital with orbital-share://; what it shared waits until Orbital is in front, should iOS
     // not open it. An orbital: link only opens, whoever sends it (a widget's tap, another app, a web page), since iOS
     // does not say who did, and Orbital's own writes go through intents (TickTaskIntent, Intents.swift): orbital:add
@@ -199,6 +253,66 @@ struct Shell: View {
     static let move = Animation.snappy(duration: 0.3)
 }
 
+// The page pushed aside for the menu (on): a card with a hairline edge, as the ChatGPT app's is; a tap closes it. Off it
+// stays, every part at nothing, so a fold or an unfold keeps what is on screen. (A sheet of glass over it was too much:
+// the bar's own glass buttons became glass on glass.) Always there and only shown or hidden: added and removed, it faded
+// out where it had been while the page slid home, a second edge lagging behind the first.
+private struct Card: ViewModifier {
+    let on: Bool
+    let open: Bool
+    let shift: CGFloat
+    let dark: Bool
+    let close: () -> Void
+
+    func body(content: Content) -> some View {
+        let open = on && open
+        content
+            .background { if on { Color(.systemBackground).ignoresSafeArea() } } // the menu behind is seen only past it
+            // the whole screen, status bar included: a clip to the page's own frame cut the top bar off
+            .mask { RoundedRectangle(cornerRadius: open ? 44 : 0, style: .continuous).ignoresSafeArea() }
+            .overlay {
+                // a faint grey over the card in dark mode, so it reads as a sheet lifted off the black menu, as the
+                // ChatGPT app's does; in light mode the shadow does that
+                RoundedRectangle(cornerRadius: 44, style: .continuous).fill(Color.pair(0x000000, 0xffffff).opacity(dark ? 0.08 : 0))
+                    .overlay { RoundedRectangle(cornerRadius: 44, style: .continuous).strokeBorder(Color(.separator), lineWidth: 1) }
+                    .ignoresSafeArea()
+                    .opacity(open ? 1 : 0)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: close)
+                    .allowsHitTesting(open)
+                    .accessibilityHidden(true)
+            }
+            .shadow(color: .black.opacity(open ? 0.12 : 0), radius: 24)
+            .offset(x: on ? shift : 0)
+            .accessibilityHidden(open) // with the menu open, VoiceOver reads the menu, not the page pushed aside
+    }
+}
+
+// The bar's buttons kept in the top bar (on) on an iPhone Duo (iOS 27.1), where they would go down the screen's edge
+// shortcut: compiler(>=6.4) lets Xcode 27.0 in too, whose SDK lacks this; drop the #if once 27.1 is the oldest Xcode used
+private struct TopBar: ViewModifier {
+    let on: Bool
+    func body(content: Content) -> some View {
+        #if compiler(>=6.4)
+        if #available(iOS 27.1, *) { content.toolbarVerticalBehavior(on ? .disabled : .automatic) } else { content }
+        #else
+        content
+        #endif
+    }
+}
+
+// + at the bottom right of a wide screen, in Ask Tana's row so the box, open or not, keeps clear of it
+struct CornerAdd: View {
+    let engine: Engine
+    let add: () -> Void
+    var body: some View {
+        Button(action: add) { AddGlyph(busy: engine.adding > 0).font(.title3).frame(width: 30, height: 30) }
+            .buttonStyle(.glass).buttonBorderShape(.circle)
+            .accessibilityLabel("Quick Add Task").accessibilityValue(engine.adding > 0 ? "Adding" : "")
+            .padding(.trailing, 25).padding(.bottom, 6) // under the middle of the status bar's icons above it (measured)
+    }
+}
+
 // The + in the bar: a thin ring turns around it while what Quick Add handed over is still being made (Engine.adding). It
 // stays the button it was, so another task can be added meanwhile.
 struct AddGlyph: View {
@@ -227,7 +341,7 @@ struct SideMenu: View {
     let icons: [String: UIImage]
     let hidden: Set<String> // sensitive and not shown by a shake
     let moved: () -> Void // the order changed: Shell keeps it
-    let close: () -> Void
+    let pick: (Shell.Page) -> Void // a page chosen: Shell shows it and closes the menu
     let settings: () -> Void
 
     var body: some View {
@@ -282,7 +396,7 @@ struct SideMenu: View {
     }
 
     private func item(_ item: Shell.Page) -> some View {
-        Button { page = item; close() } label: {
+        Button { pick(item) } label: {
             HStack(spacing: 14) {
                 // a saved search by the icon you gave it in Orbital (Set icon), else the search glyph
                 Group {
@@ -309,6 +423,7 @@ struct SideMenu: View {
 struct Composer: View {
     var prompt = "Ask Tana"
     var note: String? // a line to start with (NodeScreen: what the send that opened this chat said)
+    var lifts = true // up off the bottom while you type; false where + sits beside it (CornerAdd), level with it
     let send: (String) async throws -> String?
     @State private var text = CommandLine.arguments.contains("-typing") ? "Can you move the offsite to Thursday?" : "" // -typing: the open card, for design shots
     @State private var failure: String?
@@ -356,8 +471,9 @@ struct Composer: View {
                 }
                 .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 23, style: .continuous))
         }
-        .padding(.horizontal, open ? 14 : 36) // inset as the Codex app's composer is at rest; wider while you type, as its card is
-        .padding(.bottom, focused ? 14 : 4) // clear of the keyboard while you type, as the Codex app's card is
+        .padding(.leading, open ? 14 : 36) // inset as the Codex app's composer is at rest; wider while you type, as its card is
+        .padding(.trailing, lifts ? (open ? 14 : 36) : 12) // beside + (CornerAdd): the usual gap to it
+        .padding(.bottom, focused && lifts ? 14 : 4) // clear of the keyboard while you type, as the Codex app's card is
         .animation(reduceMotion ? nil : .snappy, value: open)
         .animation(reduceMotion ? nil : .snappy, value: focused)
         .animation(reduceMotion ? nil : .snappy, value: dictation.recording)
