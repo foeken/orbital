@@ -330,4 +330,4 @@ A wall clock in a time zone, for a time said in words (main/meetings.js) and a r
 
 ## `sdk/proto/descriptors.js`
 
-`files.{sync, graph, search, history}` (protobuf-es file descriptors), `message(file, name)`, `SyncService`, `GraphService`, `SearchService`, `ChangeSummaryService`. Regenerate by extracting the `Mr(` base64 blobs from the current `shared-*.js` bundle (see gotchas).
+`files.{sync, graph, search, history, acl}` (protobuf-es file descriptors), `message(file, name)`, `SyncService`, `GraphService`, `SearchService`, `ChangeSummaryService`, `ACLService` (CheckAccess, CheckCIDAccess, FindMissingReaders, BatchCheckAccess: no client wraps it yet). Regenerate by extracting the `Mr(` base64 blobs from the current `shared-*.js` bundle (see gotchas); sync and graph were last taken from the bundle of 2026-10-16 (`shared-CrLn34yR.js`).
