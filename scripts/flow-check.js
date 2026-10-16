@@ -726,6 +726,13 @@ flow('golden path: a task dragged onto a meeting is pinned there', async (p) => 
   assert.equal(await p.js('document.elementFromPoint(' + (meeting.left + 120) + ', ' + meeting.mid + ')?.closest(".node")?.textContent.includes("1-1 with Priya")'), true, 'and the meeting in view to drop on');
   assert.ok(await p.drag(from[0], from[1], meeting.left + 120, meeting.mid), 'a task under Today\u2019s Tasks is picked up by its words');
   await p.waitFor('tana.pinState("tana:text:mockdoc5").then((s) => s.hubs.some((h) => h.id === "tana:event:mockmeeting7"))', 'the task dragged by its words pinned to 1-1 with Priya');
+  // a task an AI agent put in your Inbox, listed under that line, dropped on Today's Tasks: pinned to today
+  const added = '(' + rowOf('An AI agent added 4 tasks') + '.querySelector(".children > .node"))';
+  await p.waitFor(added, 'the tasks under the AI agent\u2019s line');
+  assert.equal(await p.js(added + '.dataset.key'), 'tana:text:mockdoc1', 'its first task');
+  const today = await lineOf(p, "Today's Tasks");
+  assert.deepEqual(await p.js('__drag(' + added + ', ' + (today.left + 120) + ', ' + today.mid + ')'), { grip: true, accepted: true, line: false }, 'picked up and taken by Today\u2019s Tasks');
+  await p.waitFor('tana.pinState("tana:text:mockdoc1").then((s) => s.dates.includes(localDate()))', 'the AI agent\u2019s task pinned to today');
 });
 
 // 15. A task's life from Cmd+K (docs/OUTLINER.md): its status set by name, handed to someone, completed with ⌘↩ and

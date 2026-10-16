@@ -7615,6 +7615,7 @@ function runDropPlanCheck() {
     const isSpace = (node) => String((node || {}).id || '').startsWith('tana:space:');
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const isGone = () => false;
+    const isTask = (node) => node.kind === 'document' && node.icon === 'task';
     const tana = { moveTo: async () => {}, insertMention: async () => {} };
     let sel = null;
     const selKeys = () => [...sel.keys];
@@ -7638,6 +7639,7 @@ function runDropPlanCheck() {
     ${functionSource('dropPlan')}
     ({ plan: (key, x, y) => { dragKey = key; const plan = dropPlan(x, y); return plan && { docId: plan.docId, parentId: plan.parentId, afterId: plan.afterId, ref: plan.ref || null, left: plan.left, top: plan.top }; },
        canDrag: (key) => canDragItem(items.get(key)),
+       canDragItem,
        composer: (key, keys) => { sel = keys ? { keys: new Set(keys) } : null; return composerDropSegs(dragSegs(items.get(key))); },
        inView: () => { outline.dataset.key = ''; } });
   `);
@@ -7681,7 +7683,15 @@ function runDropPlanCheck() {
   //    read-only row, and never an empty line, which has nothing to take hold of.
   assert.deepEqual([api.canDrag('a'), api.canDrag('h'), api.canDrag('row-doc'), api.canDrag('e'), api.canDrag('blank')], [true, true, true, false, false],
     'a read-only row and an empty line are not dragged; a document row is');
-  assert.match(source, /if \(canDragItem\(item\)\) \(parent\?\.node\?\.timeline\?\.today \? line : bullet\)\.draggable = true;/, 'and it is the row\u2019s own marker that carries it, or the line of a task under Today\u2019s Tasks');
+  // On the Timeline only the tasks listed under a line come up: under Today's Tasks, and under "An AI agent added 3
+  // tasks to your Inbox", so those can be dropped on Today's Tasks. The line itself and a meeting under Upcoming stay.
+  const tlTask = { id: 'tana:text:01tltask0000000000000000000', kind: 'document', icon: 'task', editable: false, checkable: true };
+  const under = (timeline) => ({ key: 'k', docId: 'tl', node: tlTask, parent: { node: { timeline } } });
+  assert.deepEqual([api.canDragItem(under({ uri: null, today: true })), api.canDragItem(under({ uri: null })),
+    api.canDragItem({ ...under({ uri: null, upcoming: true }), node: { ...tlTask, icon: 'event' } }),
+    api.canDragItem({ key: 'l', docId: 'tl', node: { id: 'tl:inbox', kind: 'block', timeline: { uri: null } } })], [true, true, false, false],
+    'a task under Today\u2019s Tasks or under an added-tasks line is picked up; a meeting under Upcoming and the line itself are not');
+  assert.match(source, /if \(canDragItem\(item\)\) \(parent\?\.node\?\.timeline \? line : bullet\)\.draggable = true;/, 'and it is the row\u2019s own marker that carries it, or the line of a task under a Timeline line');
   // Chromium begins a drag from the mousedown default, so the marker that can be dragged must not prevent it —
   // this is the line that decides whether a drag starts at all.
   assert.match(source, /bullet\.onmousedown = \(e\) => \{ if \(!bullet\.draggable\) e\.preventDefault\(\); \};/, 'a draggable marker lets the press through');

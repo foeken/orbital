@@ -26,8 +26,9 @@ const dragListable = (n) => ['bullet', 'numbered'].includes(n.block) || (!isAtom
 const dragEmpty = (item) => !isAtomic(item.node) && !String(item.node.text || '').trim() && !hasKids(item);
 // A document row can be dragged too, but it never moves: what lands is a reference to it (dragRef).
 // Not on the Timeline (renderer/timeline.js): a record of what happened, not an outline, so nothing on it is picked up
-// except the tasks under Today's Tasks, which can be dragged into My Tasks (dropOnGroup below).
-const canDragItem = (item) => !!item && !item.node.draft && !item.node.timeline && (!item.parent?.node?.timeline || !!item.parent.node.timeline.today)
+// except the tasks listed under a line (Today's Tasks, "An AI agent added 3 tasks to your Inbox"), which can be dragged
+// onto Today's Tasks or into My Tasks (dropOnGroup below).
+const canDragItem = (item) => !!item && !item.node.draft && !item.node.timeline && (!item.parent?.node?.timeline || !!item.parent.node.timeline.today || isTask(item.node))
   && (item.node.kind === 'document' ? !!tana.insertMention && isRealId(item.node.id) && !isGone(item.node.id)
     : !!tana.moveTo && item.node.kind === 'block' && canEditStructure(item) && !dragEmpty(item));
 // What a drop writes, decided by what was picked up rather than by a modifier: a document cannot move into an
@@ -305,8 +306,8 @@ document.addEventListener('dragstart', (e) => {
   e.dataTransfer.setData(NODES_DRAG_TYPE, JSON.stringify(dragSegs(item)));
   const n = item.node;
   // writable: unknown (null) counts as writable, as everywhere else in the renderer (canEditNode); a task under
-  // Today's Tasks is a read-only row whose box says whether the task itself can be edited
-  const writable = item.parent?.node?.timeline?.today ? n.checkable === true : n.editable !== false;
+  // a Timeline line is a read-only row whose box says whether the task itself can be edited
+  const writable = item.parent?.node?.timeline ? n.checkable === true : n.editable !== false;
   if (isTask(n) && isRealId(n.id)) e.dataTransfer.setData(TASK_DRAG_TYPE, JSON.stringify({ id: n.id, text: n.text || '', kind: n.kind, icon: n.icon, createdBy: n.createdBy, stateType: stateOf(n), writable }));
   e.dataTransfer.setDragImage(dragLine(row), 8, 10);
   row.classList.add('dragging');
