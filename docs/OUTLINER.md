@@ -1096,7 +1096,9 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   Today's Tasks, a drop between rows is a drop on the section under the pointer (its heading outlined, `groupAt`) or
   the Today block. The writes are read off the task as it stands (`groupDropWrites`, in the order `responsibilityOf`
   reads them), and a task dragged from another pane, whose dataTransfer carries
-  `application/x-orbital-task`, lands the same way:
+  `application/x-orbital-task`, lands the same way. On the Timeline the tasks listed under a line can be picked up
+  (`canDragItem`): those under Today's Tasks and those under "An AI agent added 3 tasks to your Inbox", so one an
+  agent added is dropped on Today's Tasks; the lines themselves and the meetings under Upcoming meetings cannot:
 
   | Drop into | Writes | Refused |
   |---|---|---|
