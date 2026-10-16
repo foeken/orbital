@@ -150,9 +150,86 @@ struct Redacted: TextRenderer {
 // means something): Orbital's green for done, blue for new and for a meeting under way.
 struct TimelineScreen: View {
     let engine: Engine
+    var tasks: Shell.Page? // the saved search of tasks, its own column when there is room (Shell)
+    @Binding var wide: Bool // room for two columns (an unfolded iPhone Duo): the Timeline left, the tasks right
+    let ask: (String) async throws -> String? // Ask Tana, under the tasks column when there are two (Shell has it under the page otherwise)
+    let add: () -> Void // Quick Add, the + beside Ask Tana there
     @State private var shown = true // the rows: hidden while the skeleton is up, and in only once it has gone
+    @State private var half: CGFloat = 0 // the Timeline's width that puts the line between them in the screen's middle, on the fold
 
     var body: some View {
+        Group {
+            if wide, let id = tasks?.searchID {
+                HStack(spacing: 0) {
+                    // each heading a bar of its own, 26 pt down (level with the menu button, measured): what scrolls under
+                    // it fades out there, as under the top bar
+                    timeline.safeAreaBar(edge: .top) { heading("Timeline").padding(.leading, 57) } // beside the menu button
+                        .scrollEdgeEffectStyle(.soft, for: .top) // a fade only: the hard style drew a line under the heading
+                        .padding(.leading, 7).frame(width: half) // the rail under the middle of the menu button (measured)
+                    Divider().ignoresSafeArea(edges: .bottom) // the screen's whole height, top to bottom
+                    NodeScreen(engine: engine, id: id, titled: false).id(id)
+                        .contentMargins(.top, 11, for: .scrollContent) // its first group level with Today's Tasks across the line (measured)
+                        .safeAreaBar(edge: .top) { heading(tasks?.title ?? "") }
+                        .scrollEdgeEffectStyle(.soft, for: .top)
+                    .padding(.leading, 12) // room from the line in the middle
+                    .frame(maxWidth: .infinity)
+                    .safeAreaInset(edge: .bottom) { HStack(alignment: .bottom, spacing: 0) { Composer(lifts: false, send: ask); CornerAdd(engine: engine, add: add) } }
+                }
+                // up in the bar: the headings level with the menu button (26 pt down, measured)
+                .ignoresSafeArea(.container, edges: .top)
+                .navigationTitle("") // each column names itself, level with the other
+            } else {
+                timeline
+            }
+        }
+        .onGeometryChange(for: Bool.self) { Shell.wide($0.size) } action: { wide = $0 }
+        // the screen's middle, counting what the safe area takes on either side (the Duo's toolbar down the right edge)
+        .onGeometryChange(for: CGFloat.self) { ($0.size.width + $0.safeAreaInsets.trailing - $0.safeAreaInsets.leading) / 2 } action: { half = $0 }
+        .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 0) // a row as tall as its padding says: a short one was stretched to 44 pt and centred, so no margin was what it read
+        // never the skeleton and the words on screen together: it goes in 0.15 s, then the rows come in
+        .opacity(shown ? 1 : 0)
+        .onChange(of: building, initial: true) { _, now in
+            if now { shown = false } else { withAnimation(.easeIn(duration: 0.25).delay(0.15)) { shown = true } }
+        }
+        .scrollDismissesKeyboard(.interactively) // scrolling the Timeline tucks the composer's keyboard away
+        .refreshable { await engine.refresh() }
+        // the free time ends when the next meeting starts: read the page again then, so neither stays on screen past it
+        .task(id: free?.until) {
+            guard let until = free?.until else { return }
+            try? await Task.sleep(for: .seconds(max(1, until / 1000 - Date.now.timeIntervalSince1970)))
+            if !Task.isCancelled { await engine.refresh() }
+        }
+        .overlay {
+            // connecting and the first read are one build, and it fades as the rows land under it
+            ZStack {
+                if building { Building().transition(.opacity) }
+                else if engine.rows.isEmpty {
+                if let error = engine.error, error == Engine.macFirst {
+                    // this account never used Orbital on a Mac, which makes its settings document (#751)
+                    ContentUnavailableView { Label("Set up Orbital on a Mac first", systemImage: "laptopcomputer") } description: { Text(error) } actions: {
+                        Button("Check Again") { Task { await engine.refresh() } }
+                    }
+                }
+                else if let error = engine.error { ContentUnavailableView("Timeline didn't load", systemImage: "exclamationmark.triangle", description: Text(error)) }
+                else { ContentUnavailableView("Nothing yet", systemImage: "clock", description: Text("Changes to your tasks, new Inbox tasks and your meetings show up here.")) }
+                }
+            }
+            .animation(.easeOut(duration: 0.15), value: building)
+        }
+        .safeAreaInset(edge: .bottom) {
+            if let error = engine.error, !engine.rows.isEmpty {
+                Text(error).font(.footnote).foregroundStyle(.secondary).padding(8).frame(maxWidth: .infinity).background(.bar)
+            }
+        }
+    }
+
+    private func heading(_ title: String) -> some View {
+        Text(title).font(.headline).frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20).padding(.top, 36).padding(.bottom, 20).accessibilityAddTraits(.isHeader)
+    }
+
+    private var timeline: some View {
         List {
             if hasToday {
                 // one stop on the rail: the Today glyph, its words, the tasks hanging under them; with none, a line saying so
@@ -191,43 +268,6 @@ struct TimelineScreen: View {
                 .foregroundStyle(.secondary)
                 .disabled(engine.loading || engine.phase != .ready)
                 .listRowSeparator(.hidden)
-            }
-        }
-        .listStyle(.plain)
-        .environment(\.defaultMinListRowHeight, 0) // a row as tall as its padding says: a short one was stretched to 44 pt and centred, so no margin was what it read
-        // never the skeleton and the words on screen together: it goes in 0.15 s, then the rows come in
-        .opacity(shown ? 1 : 0)
-        .onChange(of: building, initial: true) { _, now in
-            if now { shown = false } else { withAnimation(.easeIn(duration: 0.25).delay(0.15)) { shown = true } }
-        }
-        .scrollDismissesKeyboard(.interactively) // scrolling the Timeline tucks the composer's keyboard away
-        .refreshable { await engine.refresh() }
-        // the free time ends when the next meeting starts: read the page again then, so neither stays on screen past it
-        .task(id: free?.until) {
-            guard let until = free?.until else { return }
-            try? await Task.sleep(for: .seconds(max(1, until / 1000 - Date.now.timeIntervalSince1970)))
-            if !Task.isCancelled { await engine.refresh() }
-        }
-        .overlay {
-            // connecting and the first read are one build, and it fades as the rows land under it
-            ZStack {
-                if building { Building().transition(.opacity) }
-                else if engine.rows.isEmpty {
-                if let error = engine.error, error == Engine.macFirst {
-                    // this account never used Orbital on a Mac, which makes its settings document (#751)
-                    ContentUnavailableView { Label("Set up Orbital on a Mac first", systemImage: "laptopcomputer") } description: { Text(error) } actions: {
-                        Button("Check Again") { Task { await engine.refresh() } }
-                    }
-                }
-                else if let error = engine.error { ContentUnavailableView("Timeline didn't load", systemImage: "exclamationmark.triangle", description: Text(error)) }
-                else { ContentUnavailableView("Nothing yet", systemImage: "clock", description: Text("Changes to your tasks, new Inbox tasks and your meetings show up here.")) }
-                }
-            }
-            .animation(.easeOut(duration: 0.15), value: building)
-        }
-        .safeAreaInset(edge: .bottom) {
-            if let error = engine.error, !engine.rows.isEmpty {
-                Text(error).font(.footnote).foregroundStyle(.secondary).padding(8).frame(maxWidth: .infinity).background(.bar)
             }
         }
     }
