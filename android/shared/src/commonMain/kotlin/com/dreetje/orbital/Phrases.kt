@@ -38,6 +38,11 @@ object Phrases {
     // until Remove All Pins and are not listed: a task pinned day after day would fill the menu.
     fun pinChoices(days: List<String>, today: String, tomorrow: String): List<Pair<String, Boolean>> =
         (listOf(today, tomorrow) + days.filter { it > tomorrow }.distinct().sorted()).map { it to (it in days) }
+    // The days a node's page counts it pinned to: an open task pinned to a day gone by stays in Today's Tasks
+    // (main/timeline.js), and the Mac's drag onto Today's Tasks pins no new day for it (renderer/drag.js), so on Today's
+    // Tasks such a pin is today's too (Phrases.swift pinDays)
+    fun pinDays(days: List<String>, today: String, onToday: Boolean): List<String> =
+        if (onToday && today !in days && days.any { it < today }) (days + today).sorted() else days
     fun pinnedTo(days: List<String>, today: String, tomorrow: String): String? {
         val words = days.filter { it >= today }.distinct().sorted().map { if (it == today) "today" else if (it == tomorrow) "tomorrow" else day(it) }
         if (words.isEmpty()) return null

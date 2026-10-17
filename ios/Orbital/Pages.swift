@@ -122,11 +122,11 @@ struct NodeScreen: View {
         // untitled: no title at all, so the page around it keeps its own (the Timeline's tasks column)
         .modifier(Titled(title: !titled ? nil : page?.sensitive == true && !engine.reveal ? "" : engine.translator.words(page?.title ?? "", sensitive: page?.sensitive == true).0))
         // a document's pins: the days it is pinned to under its title, and the pin menu at the top right (PinChoices)
-        .navigationSubtitle(access == nil ? "" : Phrases.pinnedTo(engine.days[id] ?? [], today: PinChoices.today, tomorrow: PinChoices.tomorrow) ?? "")
+        .navigationSubtitle(access == nil ? "" : Phrases.pinnedTo(engine.pinDays(id), today: PinChoices.today, tomorrow: PinChoices.tomorrow) ?? "")
         .toolbar {
             if access != nil {
                 ToolbarItem(placement: .topBarTrailing) {
-                    let ahead = Phrases.pinnedTo(engine.days[id] ?? [], today: PinChoices.today, tomorrow: PinChoices.tomorrow)
+                    let ahead = Phrases.pinnedTo(engine.pinDays(id), today: PinChoices.today, tomorrow: PinChoices.tomorrow)
                     Menu { PinChoices(id: id, engine: engine, then: load) } label: {
                         // in the text colour while pinned from today on, quiet otherwise; the line under the title says to when
                         Image("Glyphs/pinDate").resizable().frame(width: 20, height: 20).foregroundStyle(ahead == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
@@ -195,7 +195,7 @@ struct PinChoices: View {
     static var tomorrow: String { Day.key(Calendar.current.date(byAdding: .day, value: 1, to: .now) ?? .now) }
 
     var body: some View {
-        let days = engine.days[id] ?? [], today = Self.today, tomorrow = Self.tomorrow
+        let days = engine.pinDays(id), today = Self.today, tomorrow = Self.tomorrow
         ForEach(Phrases.pinChoices(days, today: today, tomorrow: tomorrow), id: \.day) { c in
             Toggle(Phrases.pinDay(c.day, today: today, tomorrow: tomorrow), isOn: Binding(get: { c.on }, set: { on in Task { await engine.pinDay(id, c.day, on); await then() } }))
         }

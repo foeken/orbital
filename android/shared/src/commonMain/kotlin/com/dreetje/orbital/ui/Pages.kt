@@ -164,7 +164,7 @@ fun NodeScreen(
     val hiddenPage = current?.sensitive == true && !engine.reveal
     Column(modifier.fillMaxSize()) {
         // a document's pins: the days it is pinned to under its title, and the pin menu at the top right (PinButton)
-        val pins = access?.let { Phrases.pinnedTo(engine.days[id] ?: emptyList(), Times.key(engine.now()), Times.key(engine.now(), 1)) }
+        val pins = access?.let { Phrases.pinnedTo(engine.pinDays(id), Times.key(engine.now()), Times.key(engine.now(), 1)) }
         if (titled) PageBar(if (hiddenPage) "" else engine.translator.words(current?.title ?: "", current?.sensitive == true).first, onBack = onBack,
             subtitle = pins, action = if (access != null) ({ PinButton(id, engine) { load() } }) else null)
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -420,7 +420,7 @@ fun NodeDetails(id: String, access: Access, engine: Engine, open: () -> Unit, re
 fun PinButton(id: String, engine: Engine, then: suspend () -> Unit) {
     val c = Theme.colors
     var open by remember { mutableStateOf(false) }
-    val ahead = Phrases.pinnedTo(engine.days[id] ?: emptyList(), Times.key(engine.now()), Times.key(engine.now(), 1))
+    val ahead = Phrases.pinnedTo(engine.pinDays(id), Times.key(engine.now()), Times.key(engine.now(), 1))
     Box {
         IconButton({ open = true }, Modifier.semantics { stateDescription = ahead ?: "Not pinned" }) {
             Glyph("pinDate", Modifier.size(20.dp), if (ahead == null) c.secondary else c.text, description = "Pin")
@@ -435,7 +435,7 @@ fun PinButton(id: String, engine: Engine, then: suspend () -> Unit) {
 @Composable
 fun PinChoices(id: String, engine: Engine, close: () -> Unit, then: suspend () -> Unit = {}) {
     val c = Theme.colors
-    val days = engine.days[id] ?: emptyList()
+    val days = engine.pinDays(id)
     val today = Times.key(engine.now())
     val tomorrow = Times.key(engine.now(), 1)
     val run: (suspend () -> Unit) -> () -> Unit = { act -> { close(); engine.scope.launch { act(); then() } } }
