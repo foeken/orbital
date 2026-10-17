@@ -499,9 +499,11 @@ window.orbital = {
     for (const day of days) await within('date pins', (on ? pinDate : unpinDate)(S.client.sync, S.me.userUri, id, day));
     return JSON.stringify(on);
   },
-  // A node's pin menu: one day pinned or taken off, as the Mac's date pins do (main/pins.js setPin); pinDate checks the day
+  // A node's pin menu: one day pinned or taken off, as the Mac's date pins do (main/pins.js setPin); pinDate checks the day.
+  // Today taken off takes the days before it too, which keep an open task in Today's Tasks (Phrases pinDays)
   async pinDay(id, day, on) {
-    await within('date pins', (on ? pinDate : unpinDate)(S.client.sync, S.me.userUri, id, day));
+    const days = on || day !== today() ? [day] : ((await within('date pins', datePins(S.client.sync, S.me.userUri)))[id] || []).filter((d) => d <= day);
+    for (const d of days) await within('date pins', (on ? pinDate : unpinDate)(S.client.sync, S.me.userUri, id, d));
     return JSON.stringify(on);
   },
   async sensitive(id, on) {

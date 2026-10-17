@@ -77,9 +77,9 @@ class SpecTest {
         for ((kind, glyph) in p["glyphs"]!!.jsonObject) assertEquals(glyph.text, Glyphs.of(kind), kind)
         for ((icon, glyph) in p["markers"]!!.jsonObject) assertEquals(glyph.text, Glyphs.marker(icon), icon)
         for (c in p["pins"]!!.jsonArray.map { it.jsonObject }) {
-            val days = c["days"]!!.jsonArray.map { it.text!! }
             val today = c["today"]!!.text!!
             val tomorrow = c["tomorrow"]!!.text!!
+            val days = Phrases.pinDays(c["days"]!!.jsonArray.map { it.text!! }, today, c["onToday"]?.jsonPrimitive?.booleanOrNull ?: false)
             val choices = Phrases.pinChoices(days, today, tomorrow)
             assertEquals(c["choices"]!!.jsonArray.map { it.jsonArray[0].text!! to it.jsonArray[1].jsonPrimitive.booleanOrNull!! }, choices, days.toString())
             assertEquals(c["words"]!!.jsonArray.map { it.text }, choices.map { Phrases.pinDay(it.first, today, tomorrow) })

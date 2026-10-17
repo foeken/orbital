@@ -37,6 +37,12 @@ enum Phrases {
     static func pinChoices(_ days: [String], today: String, tomorrow: String) -> [(day: String, on: Bool)] {
         ([today, tomorrow] + Set(days.filter { $0 > tomorrow }).sorted()).map { ($0, days.contains($0)) }
     }
+    // The days a node's page counts it pinned to: an open task pinned to a day gone by stays in Today's Tasks
+    // (main/timeline.js), and the Mac's drag onto Today's Tasks pins no new day for it (renderer/drag.js), so on Today's
+    // Tasks such a pin is today's too
+    static func pinDays(_ days: [String], today: String, onToday: Bool) -> [String] {
+        onToday && !days.contains(today) && days.contains { $0 < today } ? (days + [today]).sorted() : days
+    }
     static func pinnedTo(_ days: [String], today: String, tomorrow: String) -> String? {
         let words = Set(days.filter { $0 >= today }).sorted().map { $0 == today ? "today" : $0 == tomorrow ? "tomorrow" : day($0) }
         guard let last = words.last else { return nil }

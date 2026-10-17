@@ -469,13 +469,18 @@ class Engine(
     suspend fun pinDay(id: String, day: String, on: Boolean) {
         val was = pinned
         val wasDays = days
-        val list = (days[id] ?: emptyList()).let { if (on) (it + day).distinct().sorted() else it - day }
+        // Today off takes the days before it too, as orbital.pinDay does
+        val list = (days[id] ?: emptyList()).let { if (on) (it + day).distinct().sorted() else if (day == Times.key(now())) it.filter { d -> d > day } else it - day }
         days = if (list.isEmpty()) days - id else days + (id to list)
         pinned = if (list.isEmpty()) pinned - id else pinned + id
         if (!on && day == Times.key(now())) unpinned = unpinned + id
         if (!act("return await orbital.pinDay(id, day, on)", mapOf("id" to id, "day" to day, "on" to on))) { pinned = was; days = wasDays }
         unpinned = unpinned - id
     }
+    // The days a node's page and pin menu count it pinned to: today too while it is in Today's Tasks on an older pin
+    // (Engine.swift pinDays)
+    fun pinDays(id: String): List<String> =
+        Phrases.pinDays(days[id] ?: emptyList(), Times.key(now()), rows.firstOrNull { it.timeline?.today == true }?.children?.any { it.id == id } == true)
 
     // Settings' Auto-translate: the synced preference (orbital.translateTo), shown at once and kept if Tana takes it
     suspend fun translate(to: String?) {

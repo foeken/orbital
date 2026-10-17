@@ -695,6 +695,57 @@
      "Sun 28 Feb"
     ],
     "said": "Pinned to Sun 28 Feb"
+   },
+   {
+    "onToday": true,
+    "days": [
+     "2026-10-01"
+    ],
+    "today": "2026-10-16",
+    "tomorrow": "2026-10-17",
+    "choices": [
+     [
+      "2026-10-16",
+      true
+     ],
+     [
+      "2026-10-17",
+      false
+     ]
+    ],
+    "words": [
+     "Today",
+     "Tomorrow"
+    ],
+    "said": "Pinned to today"
+   },
+   {
+    "onToday": true,
+    "days": [
+     "2026-10-23"
+    ],
+    "today": "2026-10-16",
+    "tomorrow": "2026-10-17",
+    "choices": [
+     [
+      "2026-10-16",
+      false
+     ],
+     [
+      "2026-10-17",
+      false
+     ],
+     [
+      "2026-10-23",
+      true
+     ]
+    ],
+    "words": [
+     "Today",
+     "Tomorrow",
+     "Fri 23 Oct"
+    ],
+    "said": "Pinned to Fri 23 Oct"
    }
   ]
  }

@@ -455,12 +455,17 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     // taken off leaves Today's Tasks at once, as Remove All Pins does.
     func pinDay(_ id: String, _ day: String, _ on: Bool) async {
         let was = days[id]
-        let now = on ? Set((was ?? []) + [day]).sorted() : (was ?? []).filter { $0 != day }
+        // Today off takes the days before it too, as orbital.pinDay does
+        let now = on ? Set((was ?? []) + [day]).sorted() : (was ?? []).filter { day == Day.key(.now) ? $0 > day : $0 != day }
         func set(_ list: [String]?) { days[id] = list?.isEmpty == false ? list : nil; if days[id] == nil { pinned.remove(id) } else { pinned.insert(id) } }
         set(now)
         if !on, day == Day.key(.now) { withAnimation(Self.collapse) { _ = unpinned.insert(id) } }
         if !(await act("return await orbital.pinDay(id, day, on)", ["id": id, "day": day, "on": on])) { set(was) }
         unpinned.remove(id)
+    }
+    // The days a node's page and pin menu count it pinned to: today too while it is in Today's Tasks on an older pin
+    func pinDays(_ id: String) -> [String] {
+        Phrases.pinDays(days[id] ?? [], today: Day.key(.now), onToday: rows.first { $0.timeline?.today == true }?.children?.contains { $0.id == id } == true)
     }
     struct PickingDay: Identifiable { let id: String; let then: () async -> Void }
     var pickingDay: PickingDay? // Pick a Date …: the node whose date picker is open (PinDaySheet, laid over everything by Shell)
