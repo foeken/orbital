@@ -941,9 +941,10 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 /* any other row between them ends the list: numbering starts again under the next heading, as in Tana */
 .node:not(.t-numbered) { counter-reset: ol; }
 .node.t-numbered { counter-increment: ol; }
+.node.t-numbered > .line > .bullet { width: 32px; }
 .node.t-numbered > .line > .bullet::before {
-  content: counter(ol) "."; left: 0; top: 0; width: 18px; height: 24px; border-radius: 0;
-  background: none; color: var(--muted); font-size: 12px; line-height: 24px; text-align: center;
+  content: counter(ol) "."; left: 0; top: 0; width: 26px; height: 24px; border-radius: 0;
+  background: none; color: var(--muted); font-size: 12px; line-height: 24px; text-align: right;
 }
 .node.t-numbered > .line > .bullet:hover::before { background: none; color: #1a1a1a; }
 .node.t-code > .line .text { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; background: #f5f5f5; border-radius: 6px; padding: 6px 10px; }
