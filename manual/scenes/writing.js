@@ -23,7 +23,7 @@ module.exports = [
   // the chapter as a reader sees it: drawn only when named with --only, into $TMPDIR/manual-check
   { name: 'writing-page', url: 'manual/writing.html#linking', full: true, size: '1440x900' },
   // the block types, one of each
-  { name: 'writing-blocks', size: '1100x860', setup: [...doc0, scrollTo('Walk through both'), { hover: '.node .text', text: 'Walk through both' }], clip: { page: '' } },
+  { name: 'writing-blocks', size: '1100x860', setup: [...doc0, { js: "N('Agree an owner for each pilot').start = 113; render(); 1" }, scrollTo('Walk through both'), { hover: '.node .text', text: 'Walk through both' }], clip: { page: '' } },
   // typing: Enter, Tab, ⇧Tab
   { name: 'writing-type', video: true, size: '640x320', setup: blank('Offsite plan'), steps: [
     { type: 'Why we meet', delay: 60 }, { key: '↩' },
