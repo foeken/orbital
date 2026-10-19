@@ -1648,6 +1648,29 @@ flow('⌘K Delete with the caret in a row deletes that row, not the page', async
 });
 
 
+// An empty page's draft is a local placeholder, so Delete acts on the page instead of sending its fake id to Tana.
+flow('Delete from an empty meeting or note deletes the page, never its draft', async (p) => {
+  await p.start();
+  await p.js('window.__del = []; const d = tana.deleteDocument; tana.deleteDocument = async (id) => { __del.push(id); return d(id); }; tana.removeMany = async (docId, ids) => { throw new Error("no outline node " + ids[0]); }; 1');
+  for (const id of ['mockmeeting3', 'tana:text:mockpin1']) {
+    if (id === 'tana:text:mockpin1') await p.js('kids.set(' + J(id) + ', []); 1');
+    await p.js('goTo(' + J(id) + ')'); await at(p, id);
+    await p.waitFor('document.querySelector("#outline .node.draft .text")', 'the empty draft');
+    await p.js('document.querySelector("#outline .node.draft .text").focus(); 1');
+    // A first character still being saved must not turn Delete into a delete of the whole page.
+    await p.js('window.__draft = items.get(keyOfEl(document.activeElement)); __draft.node.text = "Still saving"; __draft.busy = true; 1');
+    await p.key('⌘K'); await p.type('delete');
+    await p.waitFor('palRows.some((r) => r.id === "delete")', 'Delete for the pending draft');
+    assert.equal(await p.js('palRows.find((r) => r.id === "delete").disabled'), true, 'a draft still saving cannot delete the page');
+    await closePalette(p);
+    await p.js('__draft.node.text = ""; delete __draft.busy; document.querySelector("#outline .node.draft .text").focus(); 1');
+    await command(p, 'delete', 'Delete');
+    await p.waitFor('__del.includes(' + J(id) + ')', 'the page deleted');
+    await p.waitFor('!zoom || zoom.docId !== ' + J(id), 'the deleted page left');
+  }
+  assert.deepEqual(await p.js('__del'), ['mockmeeting3', 'tana:text:mockpin1']);
+});
+
 // ⌘S and ⌘K find agent chats though Tana does not know them (renderer/agentchats.js agentChatHits, agentChatPlaceRows): by
 // every word of their title, and opened like any result
 flow('⌘S and ⌘K find agent chats, which are not in Tana', async (p) => {

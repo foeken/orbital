@@ -26,7 +26,7 @@ module.exports = [
   { name: 'sharing-ghost', size: NARROW, setup: [open(AGENDA), { wait: 1200 }, access(AGENDA), { click: '#title' }], steps: [{ key: '⌘K' }, { type: 'edit assignees' }, { wait: 300 }, { key: '↩' }, { wait: 700 }, { type: 'tomas' }, { wait: 300 }, { key: '↩' }, { wait: 1200 }, { key: 'esc' }, { wait: 900 }], clip: [0, 30, 1000, 250] },
   // ---- where it lives ----
   { name: 'sharing-move', setup: [open(ROOM), { wait: 1200 }, access(ROOM), { click: '#title' }], steps: [{ key: '⌘K' }, { type: 'move to studio' }, { wait: 600 }, { key: '↩' }, { wait: 900 }, blank], clip: pal },
-  { name: 'sharing-delete', video: true, size: NARROW, setup: [{ js: "setView('library')" }, { wait: 900 }, open(ROOM), { wait: 1200 }, access(ROOM), { click: '#title' }], steps: [
+  { name: 'sharing-delete', video: true, size: NARROW, setup: [{ js: "setView('library')" }, { wait: 900 }, open(ROOM), { wait: 1200 }, access(ROOM), { js: 'kids.set(' + JSON.stringify(ROOM) + ', []); render(true); 1' }, { click: '#outline .node.draft .text' }], steps: [
     { key: '⌘K' }, { type: 'delete', delay: 70 }, { wait: 400 }, { key: '↩' }, { wait: 1400 },
     { key: '⌘K' }, { type: 'recently deleted', delay: 45 }, { wait: 300 }, { key: '↩' }, { wait: 1000 }, { caption: '↩ restores it and opens it' }, { wait: 1600 }, { caption: '' }], clip: [0, 0, 1000, 420] },
   { name: 'sharing-archived', setup: [open(ROOM), { wait: 800 }], steps: [{ key: '⌘K' }, { type: 'archived types' }, { wait: 300 }, { key: '↩' }, { wait: 700 }, blank], clip: pal },
