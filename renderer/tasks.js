@@ -472,19 +472,20 @@ function selectionRows() {
   // actually remove and says how much it is skipping: a read-only row, or a block in a selection that also holds
   // documents, since those two removals are different operations. Whether Tana itself allows the delete is still
   // asked per document in removeSelection, because only the server knows that.
-  // with the caret in a row of the page (not its title) and nothing selected, Delete is that row, as ⇧⌘⌫ there is
+  // A saved row under the caret is the delete target. An untouched draft is only a placeholder: Delete is the page.
+  // A draft being created stays the target, disabled until it has a real id, so its page cannot be deleted mid-word.
   const caret = !selected.length && palReturn && palReturn.key && items.get(palReturn.key);
-  const its = (caret && caret.node.kind === 'block' ? [palReturn.key] : keys).map((key) => items.get(key)).filter(Boolean);
+  const its = (caret && caret.node.kind === 'block' && (!caret.node.draft || caret.busy || caret.node.text) ? [palReturn.key] : keys).map((key) => items.get(key)).filter(Boolean);
   if (its.length && tana.deleteDocument) {
     const blocksOnly = its.every((it) => it.node.kind === 'block');
     // A chat, canvas or agent has no outline to edit, yet Tana deletes it: for those, main's delete answer decides
     // (asked while the palette is open, renderer/access.js loadAccess).
     const docs = its.filter((it) => it.node.kind === 'document' && !canEditNode(it.node));
     if (!blocksOnly && !palette.hidden) docs.forEach((it) => loadAccess(it.docId));
-    const able = its.filter((it) => (blocksOnly ? canEditStructure(it) : it.node.kind === 'document' && (canEditNode(it.node) || !!accessById.get(it.docId)?.deletable) && accessById.get(it.docId)?.deletable !== false)); // a type, say, is archived, never deleted
+    const able = its.filter((it) => (blocksOnly ? !it.node.draft && canEditStructure(it) : it.node.kind === 'document' && (canEditNode(it.node) || !!accessById.get(it.docId)?.deletable) && accessById.get(it.docId)?.deletable !== false)); // a type, say, is archived, never deleted
     const skipped = its.length - able.length;
     // ⇧⌘⌫ deletes the node you are on (outline keydown; the zoomed title; a block selection) — say so on the row
-    rows.push({ id: 'delete', group, icon: 'trash', label: `Delete${count(able.length, 'item')}`, hint: !skipped ? '' : selected.length ? `${skipped} skipped` : 'Read-only', kbd: selected.length ? undefined : '⇧⌘⌫', disabled: !able.length, run: () => removeSelection(able.map((it) => it.key)) });
+    rows.push({ id: 'delete', group, icon: 'trash', label: `Delete${count(able.length, 'item')}`, hint: !skipped ? '' : selected.length ? `${skipped} skipped` : its.some((it) => it.node.draft) ? 'Not saved yet' : 'Read-only', kbd: selected.length ? undefined : '⇧⌘⌫', disabled: !able.length, run: () => removeSelection(able.map((it) => it.key)) });
   }
   // A type is archived rather than deleted, one at a time, as Tana's own type page does it: it leaves the Types list
   // and every picker, and Cmd+Z or Cmd+K "Archived types" brings it back.

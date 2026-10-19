@@ -619,7 +619,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   it is (Set type, Auto-pick type, Remove type, Add field, Edit fields); how it looks (Set icon, Set field icon, Set colour, Mark as
   sensitive); the agents (Assign to <agent> …, Go to <agent> task, one of each for every agent that is on); Edit visibility, Add participants … (Edit
   visibility at its Select people step when the document may be shared with people, renderer/access.js `addParticipants`), Notify on changes,
-  Copy link, Export to PDF; last Archive type and Delete. A read-only node shows Delete disabled.
+  Copy link, Export to PDF; last Archive type and Delete. A read-only node shows Delete disabled. With the caret in an untouched empty draft, Delete targets the page; a draft still being saved shows Delete disabled with “Not saved yet”.
 - **View options**: the pills by what they do — Filter by type, Filter by meeting time (the When pill, meetings alone), Filter by status, Filter by assignee, Sort by, Group
   by, each hinting its value — then Clean up, Save as new search (a view with pills, as its Save as search pill; issue #538),
   Filter rows by text, Switch to table/outliner and Column widths ….
