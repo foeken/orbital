@@ -7128,6 +7128,47 @@ async function main() {
     assert.throws(() => outline.setBlockType(d, 't0000000', 'paragraph'), /cannot change type/);
     console.log('ok  content schema: Crockford ids, underline mark, tables left alone');
   }
+  // A multi-paragraph list item has one marker, regardless of how many blocks follow its title.
+  for (const kind of ['orderedList', 'bulletList']) {
+    const d = new Document(DOC);
+    d.loro.configTextStyle({ bold: { expand: 'none' } });
+    d.transact(() => {
+      const make = (list, name, id, words) => {
+        const m = list.insertContainer(list.length, new LoroMap()); m.set('nodeName', name);
+        m.setContainer('attributes', new LoroMap()).set('blockId', id);
+        const c = m.setContainer('children', new LoroList());
+        if (words) c.insertContainer(0, new LoroText()).insert(0, words);
+        return m;
+      };
+      const root = d.content; root.set('nodeName', 'doc');
+      const list = make(root.setContainer('children', new LoroList()), kind, 'list0001');
+      list.get('attributes').set('start', 4);
+      const item = make(list.get('children'), 'listItem', 'item0001');
+      const title = make(item.get('children'), 'paragraph', 'title001', 'A book');
+      title.get('children').get(0).mark({ start: 0, end: 6 }, 'bold', {});
+      make(item.get('children'), 'paragraph', 'reflect1', 'A reflection.');
+      make(item.get('children'), 'paragraph', 'reflect2', 'Another paragraph.');
+      const quote = make(item.get('children'), 'blockquote', 'quote001');
+      make(quote.get('children'), 'paragraph', 'quote002', 'A quotation.');
+      const nested = make(item.get('children'), kind, 'nested01');
+      const child = make(nested.get('children'), 'listItem', 'nested02');
+      make(child.get('children'), 'paragraph', 'nested03', 'A nested item');
+      const next = make(list.get('children'), 'listItem', 'item0002');
+      make(next.get('children'), 'paragraph', 'title002', 'Next book');
+    });
+    const before = d.content.toJSON(), rows = outline.readOutline(d), type = kind === 'orderedList' ? 'numbered' : 'bullet';
+    assert.deepEqual(rows.map((r) => r.block), [type, type]);
+    assert.deepEqual(rows[0].segments, [{ text: 'A book', marks: { bold: true } }]);
+    assert.deepEqual(rows[0].children.map((r) => [r.text, r.block]), [
+      ['A reflection.', 'paragraph'], ['Another paragraph.', 'paragraph'], ['A quotation.', 'quote'], ['A nested item', type],
+    ]);
+    assert.equal(rows[0].start, kind === 'orderedList' ? 4 : undefined);
+    assert.deepEqual(d.content.toJSON(), before, 'reading preserves every stored block and mark');
+    outline.setBlockType(d, 'reflect1', 'numbered');
+    assert.equal(outline.readOutline(d)[0].children[0].block, 'numbered', 'a continuation can become its own list item');
+    assert.equal(outline.readOutline(d)[1].text, 'Next book', 'converting a continuation leaves the next item in place');
+  }
+  console.log('ok  multi-paragraph list items number only their first block, preserving marks, quotes and nested lists');
   // #35: a line break is Tana's inline hardBreak node, in the shape its editor writes (loro-prosemirror: a map with an
   // attributes map and a children list, both empty), splitting the text into two runs; orderedList.start and
   // codeBlock.language are kept, read and cleared where they stop meaning anything.
