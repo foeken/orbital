@@ -118,7 +118,7 @@ function holderOf(block) {
   const list = block.parent(), owner = list && list.parent();
   if (!owner) return null;
   if (isQuote(owner)) return owner;
-  if (!isItem(owner)) return null;
+  if (!isItem(owner) || kids(owner).get(0).id !== block.id) return null; // only the item's first block carries its marker
   const items = owner.parent(), listMap = items && items.parent();
   return listMap && isList(listMap) ? listMap : null;
 }
@@ -958,10 +958,7 @@ function setBlockType(document, id, type) {
 function rehome(document, id, wanted) {
   const { block, item } = must(document, id);
   const holder = holderOf(block);
-  // A bare block among somebody's children takes its holder from the grandparent list (holderOf, which is what
-  // draws it as a list row), but it is not one of that holder's items: an index in its own list means nothing to
-  // splitHolder, which moved the wrong row and left the block at the document root. It is left where it is and
-  // only enclosed below, which is how it becomes a list row among its siblings.
+  // Only split a holder around one of its own items; continuation blocks stay among their siblings.
   const inHolder = !!holder && (item || block).parent().id === kids(holder).id;
   if (inHolder && name(holder) === wanted) return;
   // Between the two list kinds a listItem moves whole, so its children and its checkbox stay with it.

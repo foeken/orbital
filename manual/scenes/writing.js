@@ -24,6 +24,7 @@ module.exports = [
   { name: 'writing-page', url: 'manual/writing.html#linking', full: true, size: '1440x900' },
   // the block types, one of each
   { name: 'writing-blocks', size: '1100x860', setup: [...doc0, { js: "N('Agree an owner for each pilot').start = 113; render(); 1" }, scrollTo('Walk through both'), { hover: '.node .text', text: 'Walk through both' }], clip: { page: '' } },
+  { name: 'writing-list-paragraphs', size: '900x520', setup: [...doc0, { js: "const book = N('Agree an owner for each pilot'); book.segments = [{ text: 'A book worth discussing', marks: { bold: true } }]; book.text = 'A book worth discussing'; book.children = [{ id: 'reflect1', kind: 'block', block: 'paragraph', text: 'A reflection can continue beneath the title without another number.', segments: [{ text: 'A reflection can continue beneath the title without another number.' }], children: [] }, { id: 'quote001', kind: 'block', block: 'quote', text: 'Make room for another perspective.', segments: [{ text: 'Make room for another perspective.' }], children: [] }]; book.hasChildren = true; render(); 1" }, scrollTo('A book worth discussing', 65)], clip: { page: '', sel: '.node.t-numbered', pad: 0 } },
   // typing: Enter, Tab, ⇧Tab
   { name: 'writing-type', video: true, size: '640x320', setup: blank('Offsite plan'), steps: [
     { type: 'Why we meet', delay: 60 }, { key: '↩' },
