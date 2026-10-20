@@ -9,6 +9,9 @@ const card = { sel: '#palette .card', pad: 24 };
 const PANE = (from, to) => "new Promise((done) => { const f = document.querySelector('iframe'), t0 = performance.now(); f.style.flex = 'none'; f.style.boxShadow = '1px 0 0 rgba(128, 128, 128, 0.35)'; " +
   "const step = (t) => { const k = Math.min(1, (t - t0) / 2400), e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2; f.style.width = (" + from + " + (" + (to - from) + ") * e) + 'px'; if (k < 1) requestAnimationFrame(step); else done(); }; requestAnimationFrame(step); })";
 module.exports = [
+  { name: 'views-meeting-pins', size: '1000x800', setup: [...library('responsibility'),
+    { js: "const tasks = shownDocs().filter(isTask); for (const n of tasks.slice(0, 3)) { n.createdBy = me().id; taskMetaById.set(n.id, { ...taskMetaById.get(n.id), assignees: [me().id] }); n.stateType = 'open'; } for (const n of tasks.slice(1, 3)) n.pinnedToMeeting = true; render(true)" },
+    { wait: 400 }], clip: [0, 30, 1000, 740] },
   // the pills over the Library, for the annotated picture
   { name: 'views-pills', setup: library(), clip: [0, 96, 1200, 84] },
   // the three presets, through Cmd+K

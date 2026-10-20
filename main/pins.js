@@ -168,7 +168,9 @@ async function nodePin(hubId, uri, on) {
   const doc = await document(hubId);
   if (!await canWriteDoc(doc)) throw new Error('Write permission is unknown or unavailable');
   (on ? pins.pinItem : pins.unpinItem)(doc, uri);
+  S.client.graph.forget(); // the next task-list read must see the new pin edges
   send('outline:changed', hubId);
+  scheduleRefresh(2000);
   return pins.items(doc).map((p) => p.uri);
 }
 // offset 0 is today, 1 tomorrow, or a 'YYYY-MM-DD' day (a date mention's): the document titled with that date, pinned to it.

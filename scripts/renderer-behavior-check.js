@@ -3412,6 +3412,14 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.deepEqual(titles([...responsibility, ...agents], 'responsibility'),
     [['Unassigned', ['t6']], ['Agent', ['ta1', 'ta2', 'ta3']], ['My inbox', ['t8']], ['Mine', ['t10']], ['Tracking', ['t1']], ['My later', ['t9']], ['My completed', ['t2']], ['Assigned by others', ['t5']]],
     'Responsibility runs Unassigned, Agent, My inbox, Mine, then Tracking under your own work, then My later and My completed, and ends with what somebody else handed you');
+  const meetingPinned = { id: 'meetingPinned', icon: 'task', pinnedToMeeting: true, createdBy: 'sam' };
+  assert.deepEqual(titles([...responsibility, meetingPinned], 'responsibility').map(([title]) => title),
+    ['Unassigned', 'My inbox', 'Mine', 'Pinned to meetings', 'Tracking', 'My later', 'My completed', 'Assigned by others'],
+    'meeting pins have their own section directly after Mine, regardless of creator or assignee');
+  assert.deepEqual(titles([{ ...meetingPinned, id: 'tp1', stateType: 'closed' }, { ...meetingPinned, id: 'ta1' }], 'responsibility'),
+    [['Pinned to meetings', ['tp1', 'ta1']]], 'meeting pins take precedence over date pins, completion and agents without duplicates');
+  assert.deepEqual(titles([{ id: 'ownedOnly', icon: 'task', meeting: { id: 'tana:event:example' } }], 'responsibility'), [],
+    'meeting ownership alone is not a pin');
   assert.deepEqual(titles(agents, 'responsibility'), [['Agent', ['ta1', 'ta2', 'ta3']]],
     'a node handed to the local agent is in the Agent section and in no other: whoever Tana has it assigned to, and even with no metadata read yet — asking for it by name is enough to list it');
   api.dragging(true);
@@ -3436,7 +3444,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     'a task you made and hold sits in exactly one of the five state sections, Waiting among them');
   assert.deepEqual([owned({ done: 1 }), owned({ done: 0 }), owned({})], ['My completed', 'Mine', 'Mine'],
     'and a row carrying only the older done flag reads the same way, while one with no state at all is under way');
-  assert.deepEqual(titles([...responsibility, ...agents, pinnedTask, { ...pinnedTask, id: 'tp2', stateType: 'waiting' }], 'responsibility').map(([title]) => title), plain(api.RESPONSIBILITY),
+  assert.deepEqual(titles([...responsibility, ...agents, meetingPinned, pinnedTask, { ...pinnedTask, id: 'tp2', stateType: 'waiting' }], 'responsibility').map(([title]) => title), plain(api.RESPONSIBILITY),
     'and nothing else is filed: a row you neither made nor hold, and one whose assignees have not arrived, are left out rather than collected under a heading');
   // Every section holds rows: the grouping's leftovers are not listed at all, under no heading and with no note.
   api.set('tasks', 'responsibility', 'default');

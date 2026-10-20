@@ -157,7 +157,7 @@ const meetingRow = (n, withDate) => {
 // An event also carries its own window (`start`/`end`), and only an event does: the keys are added rather than always
 // present, so every other kind of node keeps the shape it had. A row restored from the SQLite cache has no window —
 // the cache stores the label, not the times — so a consumer that needs one asks the graph, as the meeting picker does.
-const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), ...(titleOnly.get(r.id) ? { renamable: true } : {}), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? (typeIconName(r.id) || idKind(r.id)) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: newer(r.updatedAt, (nodeMeta.get(r.id) || {}).updatedAt), createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, createdBy: nodeCreators.get(r.id), stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType, ...(r.start ? { start: r.start, end: r.end } : {}), ...(r.fields ? { fields: r.fields } : {}), ...(r.meeting ? { meeting: r.meeting } : {}) });
+const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), ...(titleOnly.get(r.id) ? { renamable: true } : {}), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? (typeIconName(r.id) || idKind(r.id)) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: newer(r.updatedAt, (nodeMeta.get(r.id) || {}).updatedAt), createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, createdBy: nodeCreators.get(r.id), stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType, ...(r.start ? { start: r.start, end: r.end } : {}), ...(r.fields ? { fields: r.fields } : {}), ...(r.meeting ? { meeting: r.meeting } : {}), pinnedToMeeting: meetingPinnedIds.has(r.id) });
 // A typed node's field values as the graph lists them (`attributes`, keyed "<type uri>?attribute=<key>"): one string
 // per value, which is what a row shows of a field (renderer/views.js fieldValues). Verified live on Goal 2026-09-25.
 function fieldValues(n) {
@@ -178,9 +178,17 @@ function graphRow(n, withDate) {
 // 2026-09-29: 16 of 40 newest tasks), so a row can link back to it (renderer/render.js meetingLinkEl). Its title and
 // start come from resolveMeetings, one lookup per list for the meetings not seen yet.
 // ponytail: names are kept for the session; a meeting renamed meanwhile shows its old name until a restart.
+const meetingPinnedIds = new Set();
 const meetingNames = new Map(); // event uri -> { title, start } (or {} when the graph would not say)
 const meetingOf = (n) => (n.state && n.state.type && idKind(n.ownerUri || '') === 'event' ? { id: n.ownerUri, ...(meetingNames.get(n.ownerUri) || {}) } : null);
 async function resolveMeetings(nodes) {
+  const tasks = nodes.filter((n) => n.state && n.state.type).map((n) => n.id);
+  if (tasks.length && S.client) {
+    // Read actual pins in one batch; being owned by a meeting does not mean pinned to it.
+    const { edges = [] } = await S.client.graph.listEdges({ toNodeIds: tasks, edgeTypes: ['EDGE_TYPE_HAS_PIN'] });
+    for (const id of tasks) meetingPinnedIds.delete(id);
+    for (const edge of edges) if (idKind(edge.fromNodeId || '') === 'event') meetingPinnedIds.add(edge.toNodeId);
+  }
   const missing = [...new Set(nodes.filter((n) => n.state && n.state.type && idKind(n.ownerUri || '') === 'event').map((n) => n.ownerUri).filter((u) => !meetingNames.has(u)))];
   if (!missing.length || !S.client) return;
   const { nodes: events = [] } = await S.client.graph.listNodes({ nodeIds: missing, limit: missing.length }).catch(() => ({ nodes: [] }));

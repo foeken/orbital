@@ -69,9 +69,10 @@ const MINE_STATES = { proposed: 'My inbox', open: 'Mine', waiting: 'Waiting', cl
 // nobody else's pins land here. It heads the list, and its rows say the day (pinnedOn below). Once completed it is done
 // asking for attention, so it goes to My completed (yours, like the pin) and keeps its pin; one you are waiting on is
 // not yours to do today either, so it goes to Waiting.
-const RESPONSIBILITY = ['Pinned', 'Unassigned', 'Agent', 'My inbox', 'Mine', 'Waiting', 'Tracking', 'My later', 'My completed', 'Assigned by others'];
+const RESPONSIBILITY = ['Pinned', 'Unassigned', 'Agent', 'My inbox', 'Mine', 'Pinned to meetings', 'Waiting', 'Tracking', 'My later', 'My completed', 'Assigned by others'];
 function responsibilityOf(n) {
   if (n.draft) return n.group || null; // a new task drafted under a section (renderer/drag.js groupDraft) stays in it while it is typed
+  if (isTask(n) && n.pinnedToMeeting) return 'Pinned to meetings';
   if (agentIds.has(n.id)) return 'Agent'; // the local mark the badge is drawn from (renderer/nodes.js loadAgentIds)
   if (isTask(n) && datePinsById.has(n.id)) return stateOf(n) === 'closed' ? 'My completed' : stateOf(n) === 'waiting' ? 'Waiting' : 'Pinned';
   const uri = me() && me().id, meta = taskMetaById.get(n.id);
@@ -248,7 +249,7 @@ function groupKey(n, by) {
 function groupRows(list, by) {
   const buckets = new Map();
   // a task being dragged needs somewhere to land, empty sections included (renderer/drag.js setTaskDragging)
-  if (by === 'responsibility' && taskDragging) for (const k of RESPONSIBILITY) if (k !== 'Assigned by others') buckets.set(k, []);
+  if (by === 'responsibility' && taskDragging) for (const k of RESPONSIBILITY) if (k !== 'Assigned by others' && k !== 'Pinned to meetings') buckets.set(k, []);
   // no key means this grouping has no section for the row (Responsibility, above): it is left out, and since a
   // grouped page takes its flat list from the sections, it leaves the keyboard order too.
   for (const n of list) { const k = groupKey(n, by); if (!k) continue; if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(n); }
