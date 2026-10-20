@@ -63,7 +63,13 @@ function mainHelpers(childProcess) {
   // the agent module itself as well: creating a task spawns a real app-server, which a check stubs out by replacing
   // that one function on the module main.js holds
   const loaded = load(nodePath.join(root, 'main.js'));
-  return { ...loaded, handlers, opened, appPage, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), appServer: load(nodePath.join(root, 'main', 'codex-app-server.js')), linked: load(nodePath.join(root, 'main', 'agents', 'linked.js')), agentChats: load(nodePath.join(root, 'main', 'agentchats.js')), mcpServer: load(nodePath.join(root, 'main', 'mcp-server.js')), documents: load(nodePath.join(root, 'main', 'documents.js')), meetings: load(nodePath.join(root, 'main', 'meetings.js')), meetingNotes: load(nodePath.join(root, 'main', 'meeting-notes.js')) };
+  return { ...loaded, testRuntime: (patch) => {
+    if (patch.client?.graph) {
+      patch.client.graph.listEdges ||= async () => ({ edges: [] });
+      patch.client.graph.forget ||= () => {};
+    }
+    return loaded.testRuntime(patch);
+  }, rows: load(nodePath.join(root, 'main', 'rows.js')), handlers, opened, appPage, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')), codex: load(nodePath.join(root, 'main', 'agents', 'codex.js')), appServer: load(nodePath.join(root, 'main', 'codex-app-server.js')), linked: load(nodePath.join(root, 'main', 'agents', 'linked.js')), agentChats: load(nodePath.join(root, 'main', 'agentchats.js')), mcpServer: load(nodePath.join(root, 'main', 'mcp-server.js')), documents: load(nodePath.join(root, 'main', 'documents.js')), meetings: load(nodePath.join(root, 'main', 'meetings.js')), meetingNotes: load(nodePath.join(root, 'main', 'meeting-notes.js')) };
 }
 
 // An agent's MCP connection to an MCP server (mcp-server/server.js), signed in as an MCP client signs in: registered, PKCE, a token
@@ -2015,6 +2021,23 @@ async function main() {
     assert.equal(backend.rememberNodeHue({ id: spaceId, title: 'Studio LT' }), false, 'a data-map read carries no appearance and changes nothing');
     assert.equal((await backend.handlers.get('doc:info')(null, spaceId)).hue, 193, 'reading the document never erases the graph hue');
     console.log('ok  appearance hue survives Loro reads and reaches documents opened without a cached row');
+  }
+
+  {
+    const backend = mainHelpers(), task = { id: 'tana:text:' + ulid(), title: 'Prepare agenda', state: { type: 'open' } };
+    const other = { ...task, id: 'tana:text:' + ulid() }, event = 'tana:event:' + ulid(), space = 'tana:space:' + ulid();
+    let edges = [{ fromNodeId: event, toNodeId: task.id }, { fromNodeId: space, toNodeId: other.id }];
+    const asked = [];
+    backend.testRuntime({ client: { graph: { listNodes: async () => ({ nodes: [] }), listEdges: async (params) => { asked.push(params); return { edges }; } } } });
+    await backend.rows.resolveMeetings([task, other]);
+    assert.deepEqual([task, other].map((n) => backend.toNode(backend.graphRow(n)).pinnedToMeeting), [true, false],
+      'only actual pins from a meeting count; space pins do not');
+    assert.deepEqual(JSON.parse(JSON.stringify(asked)), [{ toNodeIds: [task.id, other.id], edgeTypes: ['EDGE_TYPE_HAS_PIN'] }],
+      'all listed tasks share one pin lookup');
+    edges = [];
+    await backend.rows.resolveMeetings([task, other]);
+    assert.equal(backend.toNode(backend.graphRow(task)).pinnedToMeeting, false, 'unpinning clears the old group on the next read');
+    console.log('ok  meeting task pins: batched, distinct from space pins and cleared when removed');
   }
 
   // Sort/group data on a row: updatedAt and createdAt (ISO) and the task's stateType, including for a cached
@@ -5680,6 +5703,7 @@ async function main() {
     assert.equal(require('../sdk/node').editable(readNode(hub), ME), false, 'an event body stays read-only');
 
     const backend = mainHelpers(), events = [];
+    let forgotten = 0;
     const stranger = 'tana:user-profile:' + ulid();
     const closed = new Document('tana:event:' + ulid());
     closed.transact((l) => { initDocument(l, 'someone else’s meeting', stranger); l.getMap('data').set('type', 'event'); l.getMap('data').set('restricted', true); });
@@ -5689,7 +5713,7 @@ async function main() {
     const claims = Buffer.from(JSON.stringify({ org_id: ORG, role: 'member' })).toString('base64url');
     backend.testRuntime({
       me: { userUri: ME, orgId: ORG, orgDocUri: ctx.orgDocUri },
-      client: { sync: { getDocument: (id) => documents.get(id), subscribe: async (id) => { if (!documents.has(id)) throw new Error('not found'); return documents.get(id); } } },
+      client: { graph: { listNodes: async () => ({ nodes: [] }), forget: () => { forgotten++; } }, sync: { getDocument: (id) => documents.get(id), subscribe: async (id) => { if (!documents.has(id)) throw new Error('not found'); return documents.get(id); } } },
       session: { getAccessToken: async () => 'head.' + claims + '.sig' },
       win: { isDestroyed: () => false, webContents: { send: (channel, id) => events.push([channel, id]) } },
     });
@@ -5700,6 +5724,7 @@ async function main() {
     assert.deepEqual(await backend.nodePin(hubId, docId, true), [otherId, docId]);
     assert.ok(events.some(([channel, id]) => channel === 'outline:changed' && id === hubId), 'the hub refreshes so the sidebar reloads its pins');
     assert.deepEqual(await backend.nodePin(hubId, docId, false), [otherId]);
+    assert.equal(forgotten, 2, 'pin and unpin invalidate cached edges before the task list refreshes');
     assert.deepEqual(pins.items(hub), [{ uri: otherId, mode: 'embed' }]);
     console.log('ok  pinned items on an event/space (dedup, converge, write-capability gate, not body editability)');
   }

@@ -230,7 +230,7 @@ const GROUP_WRITES = {
 function groupDraft(item) {
   if (groupBy() !== 'responsibility' || !isTask(item.node)) return false;
   const group = groupKey(item.node, 'responsibility'), list = item.parent ? kids.get(item.parent.docId) : viewOf()?.nodes;
-  if (!group || group === 'Assigned by others' || !Array.isArray(list)) return false;
+  if (!group || group === 'Assigned by others' || group === 'Pinned to meetings' || !Array.isArray(list)) return false;
   flush(item.key);
   const node = { ...draftDocNode('task'), group, after: item.node.id }; // under this row, whatever the sort (views.js keepDrafts)
   list.splice(list.indexOf(item.node) + 1, 0, node);

@@ -1661,3 +1661,5 @@ take the keys.
   further: there is no shut sidebar. Cmd+K **Collapse sidebar** / **Expand sidebar** (`toggleSidebar`, ⌃⌘S) switches the
   two; the shell tells each page which it is on the layout message (`windowPanes.sidebar`). Whether it is open, the width
   and the folded sections are kept in the shell's localStorage, one for every window. Signed out there is none.
+
+Tasks grouped by Responsibility include **Pinned to meetings** immediately after **Mine**. Actual meeting pins take precedence over the other sections, including personal date pins and agent assignments. A meeting-owned task without a pin keeps its usual section. The current search filters and row limit still apply.
