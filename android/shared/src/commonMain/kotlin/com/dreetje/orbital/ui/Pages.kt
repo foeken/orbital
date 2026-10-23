@@ -1,10 +1,5 @@
 package com.dreetje.orbital.ui
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,8 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -57,24 +50,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.dreetje.orbital.Access
@@ -90,67 +76,49 @@ import com.dreetje.orbital.kindOf
 import com.dreetje.orbital.names
 import com.dreetje.orbital.parseTime
 import com.dreetje.orbital.persons
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.Instant
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// The iPhone's ios/Orbital/Pages.swift: a node zoomed into (an outline, a saved search, a meeting, a chat) and who
+// The iPhone's ios/Orbital/Pages.swift: a node zoomed into (an outline, a saved search, a meeting) and who
 // has it and who sees it
 
-// Zoomed into a node: a chat as its conversation, a saved search as its results, a meeting as its attendees and your
+// Zoomed into a node: a saved search as its results, a meeting as its attendees and your
 // notes, its summary once Tana wrote it up (Notes | Summary over it when you have notes too), anything else as its
-// outline. A mention, a reference or a row opens the node it names.
+// outline; a chat stays on the Mac. A mention, a reference or a row opens the node it names.
 @Composable
 fun NodeScreen(
     engine: Engine,
     id: String,
     modifier: Modifier = Modifier,
     titled: Boolean = true, // false when the page is the menu's own and the shell names it
-    note: String? = null, // what the composer that started this chat had to say (Tana did not answer, or saved for later)
-    asked: Instant? = null, // when the message that opened this chat was sent: its answer is waited for
     onBack: (() -> Unit)? = null,
 ) {
     val c = Theme.colors
     val scope = rememberCoroutineScope()
     var page by remember(id) { mutableStateOf(engine.cached(id)) } // back to a page: the last read of it at once, as NavigationStack keeps it
     var error by remember(id) { mutableStateOf<String?>(null) }
-    var waitingSince by remember(id) { mutableStateOf<Instant?>(null) }
-    var waitOver by remember(id) { mutableStateOf(false) } // the two minutes an answer is waited for have passed: no dots any more (ChatView)
-    var opened by remember(id) { mutableStateOf(false) } // read from the engine at least once (page may be the cached read)
     var access by remember(id) { mutableStateOf<Access?>(null) }
     var refreshing by remember { mutableStateOf(false) }
     var assigningVisibility by remember { mutableStateOf(false) }
     var showNotes by remember(id) { mutableStateOf(false) } // a meeting's Notes | Summary: Summary first
     var everyone by remember(id) { mutableStateOf(false) } // a meeting's attendees past the first five shown
+    val chat = kindOf(id) == "chat" // never read: a chat can be megabytes
 
     // A read keeps what is on screen when it fails, and says why only while there is nothing to show
     suspend fun load() {
-        try { page = engine.open(id); error = null; opened = true } catch (e: Failure) { error = e.message }
+        if (chat) return
+        try { page = engine.open(id); error = null } catch (e: Failure) { error = e.message }
         val kind = page?.kind
-        if (kind != null && kind !in listOf("chat", "search", "event")) access = engine.access(id) ?: access
+        if (kind != null && kind !in listOf("search", "event")) access = engine.access(id) ?: access
     }
 
     LaunchedEffect(engine.phase, id) {
         if (engine.phase != Engine.Phase.Ready) return@LaunchedEffect
         load()
-        // A chat that did not open yet (just started, still on its way to Tana) is tried every two seconds until it
-        // does; from then on its changes say when to read it again (below)
-        while (!opened && kindOf(id) == "chat") { delay(2000); load() }
     }
-    // Changed in Tana, by anyone anywhere (ios/engine/live.js): read again, as the desktop's page on screen is. A chat's
-    // answer shows as it is written; a saved search or a meeting takes a row added, changed or gone.
+    // Changed in Tana, by anyone anywhere (ios/engine/live.js): read again, as the desktop's page on screen is. A saved
+    // search or a meeting takes a row added, changed or gone.
     val changed = engine.changes[id]
     LaunchedEffect(changed) { if (changed != null) load() }
-    // an answer waited for two minutes at most (renderer/chat.js CHAT_WAIT): the dots go then, with nothing to read
-    val since = waitingSince ?: asked
-    LaunchedEffect(since) {
-        waitOver = false
-        if (since == null) return@LaunchedEffect
-        delay((since + 120.seconds - engine.now()).coerceAtLeast(Duration.ZERO))
-        waitOver = true
-    }
     // marked or unmarked on another device: drawn again; only on a change, as the iPhone's onChange, or a page opened from
     // its last read was read twice over
     var readSensitive by remember(id) { mutableStateOf(engine.sensitiveIds) }
@@ -169,6 +137,7 @@ fun NodeScreen(
             subtitle = pins, action = if (access != null) ({ PinButton(id, engine) { load() } }) else null)
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
+                chat -> Empty("Chats are on the Mac", "Open this chat in Orbital on your Mac.", glyph = "discuss")
                 current != null && hiddenPage -> Empty("Hidden", "You marked this sensitive in Orbital. Shake your phone or turn on Show sensitive items in Settings to see it, and do the same again to hide it.", glyph = "hidden")
                 // a meeting, read only, as the desktop's meeting page (renderer/meetingnotes.js, renderer/fields.js
                 // attendeesFieldEl): its attendees, five and "And n more" past that, then your notes or its summary
@@ -177,7 +146,7 @@ fun NodeScreen(
                     val people = current.attendees ?: emptyList()
                     val summary = current.summary
                     val flat = Lists.flat(if (summary == null || (showNotes && notes != null)) notes ?: emptyList() else summary)
-                    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp + LocalBottomInset.current)) {
+                    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp)) {
                         val key = uniqueKeys()
                         if (people.isNotEmpty()) item("attendees") {
                             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -201,16 +170,11 @@ fun NodeScreen(
                     }
                 }
                 current != null -> when (current.kind) {
-                    "chat" -> Column(Modifier.fillMaxSize()) {
-                        ChatView(current.rows, if (waitOver) null else since, engine, Modifier.weight(1f))
-                        // sent is sent: the read after it is the chat's own change's job, so a failed read never offers to send it twice
-                        Composer(engine, "Follow up", note) { text -> val sent = engine.send(text, id); waitingSince = engine.now(); load(); sent.warning }
-                    }
                     "search" -> PullToRefreshBox(refreshing, refresh, Modifier.fillMaxSize()) {
                         val rows = engine.shown(current.rows)
                         // in the sections the search was saved with (Row.group), as the desktop shows it: no lines, and the
                         // rows closer together under headings (the iPhone's Pages.swift)
-                        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 6.dp, bottom = 6.dp + LocalBottomInset.current)) {
+                        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 6.dp, bottom = 6.dp)) {
                             val key = uniqueKeys()
                             val sections = Lists.sections(rows)
                             val grouped = sections.any { it.first != null }
@@ -223,7 +187,7 @@ fun NodeScreen(
                     }
                     else -> PullToRefreshBox(refreshing, refresh, Modifier.fillMaxSize()) {
                         val flat = Lists.flat(current.rows)
-                        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp + LocalBottomInset.current)) {
+                        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp)) {
                             val key = uniqueKeys()
                             access?.let { a -> item("details") { NodeDetails(id, a, engine, open = { assigningVisibility = true }) { load() } } }
                             flat.forEach { (row, depth) -> item(key("block:" + row.id)) { OutlineRow(row, depth, engine) } }
@@ -304,62 +268,6 @@ fun OutlineRow(row: Node, depth: Int, engine: Engine) {
             else if (row.type == "image" || row.type == "table") Text(if (row.type == "image") "Image" else "Table", style = style, color = c.secondary)
             else Words(row.styled(c, zoom), style = style, modifier = if (row.heading != null) Modifier.semantics { heading() } else Modifier)
         }
-    }
-}
-
-// A chat as the desktop draws one (renderer/chat.js, styles.css .chat-msg): your messages in a blue bubble on the right,
-// everyone else's as plain text across the page with their name over each run of them, what Tana did while thinking
-// in grey over a hairline, and three dots while an answer is on its way (since: when the last message was sent).
-// A short conversation sits at the bottom, over the composer, as the iPhone's .defaultScrollAnchor(.bottom) has it.
-@Composable
-fun ChatView(rows: List<Node>, since: Instant?, engine: Engine, modifier: Modifier = Modifier) {
-    val list = rememberLazyListState()
-    val waiting = Lists.waiting(rows, since, engine.now())
-    LaunchedEffect(rows.size, waiting) { if (rows.isNotEmpty()) list.scrollToItem(rows.size - 1 + if (waiting) 1 else 0) }
-    val keys = remember(rows) { val key = uniqueKeys(); rows.map { key(it.id) } }
-    LazyColumn(modifier.fillMaxWidth(), list, PaddingValues(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.Bottom)) {
-        itemsIndexed(rows, key = { i, _ -> keys[i] }) { i, row ->
-            Sensitive(row, engine.reveal) { Message(row, Lists.named(row, rows.getOrNull(i - 1)), engine.reveal) }
-        }
-        if (waiting) item("dots") { Dots(engine.platform.reduceMotion) }
-    }
-}
-
-@Composable
-fun Message(row: Node, named: Boolean, reveal: Boolean) {
-    val c = Theme.colors
-    val blocks = row.children ?: emptyList()
-    when {
-        row.chat?.status == true -> Text(row.words, Modifier.fillMaxWidth(), style = Type.footnote, color = c.secondary, textAlign = TextAlign.Center)
-        row.chat?.mine == true -> Box(Modifier.fillMaxWidth().padding(start = 56.dp), contentAlignment = Alignment.CenterEnd) {
-            Column(Modifier.background(c.bubble, RoundedCornerShape(16.dp)).padding(horizontal = 16.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (b in blocks) Sensitive(b, reveal) { ChatBlock(b, c.bubbleText) }
-            }
-        }
-        else -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (named) Text(row.words, style = Type.subheadline.copy(fontWeight = FontWeight.SemiBold), color = c.text)
-            for (b in blocks) Sensitive(b, reveal) { ChatBlock(b, c.text) }
-        }
-    }
-}
-
-// One block of a message: a line of what it did (grey), a document (its glyph and name, opens it), code, or words
-@Composable
-fun ChatBlock(row: Node, color: androidx.compose.ui.graphics.Color) {
-    val c = Theme.colors
-    val zoom = LocalZoom.current
-    val ref = row.reference
-    when {
-        row.note == true -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { Words(row.words, style = Type.subheadline, color = c.secondary); HorizontalDivider(color = c.separator) }
-        ref != null -> Row(Modifier.clip(CircleShape).background(c.fill).clickable { zoom(ref.uri) }.semantics { role = Role.Button }.padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Glyph(Glyphs.ofUri(ref.uri), Modifier.size(18.dp), color)
-            Words(row.words, color = color, maxLines = 1)
-        }
-        row.block == "divider" -> HorizontalDivider(color = c.separator)
-        row.block == "bullet" || row.block == "numbered" -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Text("•", color = c.secondary); Words(row.styled(c, zoom), color = color) }
-        row.block == "code" -> Text(row.words, Modifier.fillMaxWidth().background(c.fillQuiet, RoundedCornerShape(12.dp)).padding(12.dp), style = Type.subheadline.copy(fontFamily = FontFamily.Monospace), color = color)
-        else -> Words(row.styled(c, zoom), style = if (row.heading != null) Type.headline else Type.body, color = color)
     }
 }
 
@@ -463,20 +371,6 @@ private fun Field(name: String, change: () -> Unit, value: @Composable () -> Uni
         Spacer(Modifier.weight(1f))
     }
     HorizontalDivider(color = c.separator)
-}
-
-// Three dots where the answer will be, as the desktop's (renderer/chat.js chatDotsEl); still with animations off
-@Composable
-fun Dots(still: Boolean, modifier: Modifier = Modifier) {
-    val c = Theme.colors
-    // with animations off no clock runs at all: three still dots
-    val t = if (still) 0f else rememberInfiniteTransition().animateFloat(0f, 6.2832f, infiniteRepeatable(tween(1570, easing = LinearEasing))).value
-    Row(modifier.clearAndSetSemantics { contentDescription = "Tana is writing" }, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        for (i in 0 until 3) {
-            val a = if (still) 0.5f else 0.25f + 0.75f * kotlin.math.max(0f, kotlin.math.sin(t * 4 - i * 0.9f))
-            Box(Modifier.size(7.dp).alpha(a).background(c.secondary, CircleShape))
-        }
-    }
 }
 
 // renderer/tasks.js AUDIENCES: the scope's glyph and its word, a space by its name

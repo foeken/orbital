@@ -11,7 +11,7 @@ const noted = (t) => (t.note && !['meeting', 'faint'].includes(t.tone) ? demoTex
 const masked = (r) => ({
   ...r,
   ...(r.title != null ? { title: demoText(r.title, r.id) } : {}),
-  ...(r.text != null ? { text: demoText(r.text, (r.chat && r.chat.author) || r.id) } : {}),
+  ...(r.text != null ? { text: demoText(r.text, r.id) } : {}),
   ...(r.segments ? { segments: demoSegments(r.segments, r.id) } : {}),
   ...(r.reference ? { reference: { ...r.reference, label: demoText(r.reference.label, r.reference.uri) } } : {}),
   ...(r.people ? { people: r.people.map((p) => ({ ...p, name: person(p.name) })) } : {}),

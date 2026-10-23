@@ -1,7 +1,7 @@
 import AVFoundation
 import SwiftUI
 
-// Dictation in Quick Add and the Ask Tana composer, as Codex dictates: the microphone recorded (AAC mono, 44.1 kHz, small
+// Dictation in Quick Add, as Codex dictates: the microphone recorded (AAC mono, 44.1 kHz, small
 // to send) with its level sampled for the dots that move while you speak, then sent to ChatGPT as a whole
 // (ChatGPT.transcribe) once stopped, its words handed to whoever is being dictated into.
 @MainActor @Observable
@@ -43,7 +43,7 @@ final class Dictation {
         return true
     }
 
-    // Add, send or Assign (Composer, QuickAdd, HandForm): while listening or writing down, listening stops and the words
+    // Add or Assign (QuickAdd, HandForm): while listening or writing down, listening stops and the words
     // are waited for, into field; false when they did not come, so what was said is never lost without a word
     func settled(into field: Binding<String>) async -> Bool {
         guard busy else { return true }

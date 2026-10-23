@@ -43,34 +43,27 @@ struct ListRow: View {
     }
 }
 
-// Zoomed into a node: a chat as its conversation, a saved search as its results, a meeting as its attendees and your
-// notes or its summary, anything else as its outline. Read-only; a mention, a reference or a row opens the node it names.
+// Zoomed into a node: a saved search as its results, a meeting as its attendees and your notes or its summary, anything
+// else as its outline; a chat stays on the Mac. Read-only; a mention, a reference or a row opens the node it names.
 struct NodeScreen: View {
     let engine: Engine
     let id: String
     var titled = true // false when the page is the menu's own and the shell names it
-    var note: String? // what the composer that started this chat had to say (Shell: Tana did not answer, or saved for later)
-    var asked: Date? // when the message that opened this chat was sent (Shell's Ask Tana): its answer is waited for
 
     @State private var page: Engine.Page?
     @State private var error: String?
-    @State private var waitingSince: Date?
-    @State private var waitOver = false // the two minutes an answer is waited for have passed: no dots any more (ChatView)
     @State private var access: Engine.Access? // a document's Assigned to and Visible to (NodeDetails)
+    private var chat: Bool { Glyph.kind(of: id) == "chat" } // never read: a chat can be megabytes
 
     var body: some View {
         Group {
+            if chat {
+                ContentUnavailableView { Label { Text("Chats are on the Mac") } icon: { Image("Glyphs/discuss").resizable().frame(width: 48, height: 48) } } description: { Text("Open this chat in Orbital on your Mac.") }
             // a node you marked sensitive: what it is, and how to see it, until a shake shows it (the title says Hidden, as the desktop's tab does)
-            if let page, page.sensitive == true, !engine.reveal {
+            } else if let page, page.sensitive == true, !engine.reveal {
                 ContentUnavailableView { Label { Text("Hidden") } icon: { Image("Glyphs/hidden").resizable().frame(width: 48, height: 48) } } description: { Text("You marked this sensitive in Orbital. Shake your iPhone or turn on Show sensitive items in Settings to see it, and do the same again to hide it.") }
             } else if let page {
                 switch page.kind {
-                case "chat":
-                    ChatView(rows: page.rows, since: waitOver ? nil : waitingSince ?? asked, reveal: engine.reveal)
-                        // sent is sent: the read after it is the chat's own change's job, so a failed read never offers to send it twice
-                        .safeAreaInset(edge: .bottom) {
-                            Composer(prompt: "Follow up", note: note) { let sent = try await engine.send($0, to: id); waitingSince = .now; await load(); return sent.warning }
-                        }
                 case "event":
                     MeetingPage(page: page, engine: engine)
                         .refreshable { await load() }
@@ -139,29 +132,17 @@ struct NodeScreen: View {
         .task(id: engine.phase) {
             guard engine.phase == .ready else { return }
             await load()
-            // A chat that did not open yet (just started, still on its way to Tana) is tried every two seconds until it
-            // does; from then on its changes say when to read it again (below)
-            while page == nil, Glyph.kind(of: id) == "chat", !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2))
-                await load()
-            }
         }
-        // Changed in Tana, by anyone anywhere (ios/engine/live.js): read again, as the desktop's page on screen is. A chat's
-        // answer shows as it is written; a saved search or a meeting takes a row added, changed or gone.
+        // Changed in Tana, by anyone anywhere (ios/engine/live.js): read again, as the desktop's page on screen is. A
+        // saved search or a meeting takes a row added, changed or gone.
         .onChange(of: engine.changes[id]) { Task { await load() } }
-        // an answer waited for two minutes at most (renderer/chat.js CHAT_WAIT): the dots go then, with nothing to read
-        .task(id: waitingSince ?? asked) {
-            waitOver = false
-            guard let since = waitingSince ?? asked else { return }
-            try? await Task.sleep(for: .seconds(max(0, 120 - Date.now.timeIntervalSince(since))))
-            if !Task.isCancelled { waitOver = true }
-        }
     }
 
     // A read keeps what is on screen when it fails, and says why only while there is nothing to show
     private func load() async {
+        guard !chat else { return }
         do { page = try await engine.open(id); error = nil } catch { self.error = error.localizedDescription }
-        if let kind = page?.kind, !["chat", "search", "event"].contains(kind) { access = await engine.access(id) ?? access }
+        if let kind = page?.kind, !["search", "event"].contains(kind) { access = await engine.access(id) ?? access }
     }
 
     // consecutive rows under one heading; one untitled section when the search is not grouped
@@ -333,111 +314,6 @@ struct OutlineRow: View {
         .onTapGesture { openURL.zoom(row.reference?.uri) }
         .accessibilityAddTraits(row.reference != nil ? .isButton : [])
         .accessibilityAction { openURL.zoom(row.reference?.uri) }
-    }
-}
-
-// A chat as the desktop draws one (renderer/chat.js, styles.css .chat-msg): your messages in a blue bubble on the right,
-// everyone else's as plain text across the page with their name over each run of them, what Tana did while thinking
-// in grey over a hairline, and three dots while an answer is on its way (since: when the last message was sent).
-struct ChatView: View {
-    let rows: [Row]
-    var since: Date?
-    var reveal = false
-
-    var body: some View {
-        let shown = rows.enumerated().map { i, row in (row, Self.named(row, after: rows[..<i].last)) }
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 24) {
-                ForEach(shown, id: \.0.id) { Message(row: $0.0, named: $0.1, reveal: reveal).modifier(Blur(hidden: $0.0.sensitive == true && !reveal)) }
-                if waiting { Dots().padding(.top, -8) }
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
-        }
-        .defaultScrollAnchor(.bottom)
-    }
-
-    // the name over a run of replies, not over each (renderer/chat.js chatNameEl): a status line breaks the run
-    static func named(_ row: Row, after prev: Row?) -> Bool {
-        row.chat?.mine != true && row.chat?.status != true && (prev == nil || prev?.chat?.status == true || prev?.chat?.author != row.chat?.author)
-    }
-    // Tana writing (its message streaming with no words yet), or your message still unanswered for two minutes at most
-    // (renderer/chat.js CHAT_WAIT)
-    private var waiting: Bool {
-        let last = rows.last { $0.chat?.status != true }
-        if last?.chat?.streaming == true { return (last?.children ?? []).isEmpty }
-        return last?.chat?.mine == true && since.map { Date.now.timeIntervalSince($0) < 120 } == true
-    }
-}
-
-struct Message: View {
-    let row: Row
-    let named: Bool
-    let reveal: Bool // a sensitive block inside a message stays blurred too, until a shake
-
-    var body: some View {
-        if row.chat?.status == true {
-            Text(row.words).font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
-        } else if row.chat?.mine == true {
-            VStack(alignment: .leading, spacing: 8) { ForEach(row.children ?? []) { ChatBlock(row: $0).modifier(Blur(hidden: $0.sensitive == true && !reveal)) } }
-                .foregroundStyle(Color.pair(0x1b2b41, 0xe8eeff))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 11)
-                .background(Color.pair(0xeaf3fd, 0x1e3d7b), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.leading, 56)
-        } else {
-            VStack(alignment: .leading, spacing: 8) {
-                if named { Text(row.words).font(.subheadline.weight(.semibold)) }
-                ForEach(row.children ?? []) { ChatBlock(row: $0).modifier(Blur(hidden: $0.sensitive == true && !reveal)) }
-            }
-        }
-    }
-}
-
-// Three dots where the answer will be, as the desktop's (renderer/chat.js chatDotsEl); still under Reduce Motion
-struct Dots: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 0.1, paused: reduceMotion)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            HStack(spacing: 5) {
-                ForEach(0..<3) { i in
-                    Circle().frame(width: 7, height: 7).opacity(reduceMotion ? 0.5 : 0.25 + 0.75 * max(0, sin(t * 4 - Double(i) * 0.9)))
-                }
-            }
-            .foregroundStyle(.secondary)
-        }
-        .accessibilityElement()
-        .accessibilityLabel("Tana is writing")
-    }
-}
-
-// One block of a message: a line of what it did (grey), a document (its glyph and name, opens it), code, or words
-struct ChatBlock: View {
-    let row: Row
-    @Environment(\.openURL) private var openURL
-
-    var body: some View {
-        if row.note == true {
-            VStack(alignment: .leading, spacing: 10) { Text(row.words).font(.subheadline).foregroundStyle(.secondary); Divider() }
-        } else if let ref = row.reference {
-            Button { openURL.zoom(ref.uri) } label: {
-                Label { Text(row.words).lineLimit(1) } icon: { Image("Glyphs/" + Glyph.of(uri: ref.uri)).resizable().frame(width: 18, height: 18) }
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(.fill.tertiary, in: Capsule())
-            }
-            .buttonStyle(.plain)
-        } else if row.block == "divider" {
-            Divider()
-        } else if row.block == "bullet" || row.block == "numbered" {
-            HStack(alignment: .firstTextBaseline, spacing: 8) { Text("•").foregroundStyle(.secondary); Text(row.styled) }
-        } else if row.block == "code" {
-            Text(row.words).font(.callout.monospaced()).padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        } else {
-            Text(row.styled).font(row.heading != nil ? .headline : .body)
-        }
     }
 }
 

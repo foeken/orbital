@@ -10,7 +10,6 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasStateDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -18,7 +17,6 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
@@ -235,15 +233,6 @@ class SampleJourneyTest {
         launch()
         assertTrue(compose.onAllNodes(hasContentDescription("Menu")).fetchSemanticsNodes().isEmpty() == wide)
         if (wide) compose.onNodeWithText("My open tasks", useUnmergedTree = true).assertExists()
-    }
-
-    @Test fun askTanaOpensTheChat() {
-        launch()
-        val field = compose.onNode(hasContentDescription("Ask Tana") and hasSetTextAction())
-        field.performClick()
-        field.performTextInput("Summarise this week")
-        compose.onNode(hasContentDescription("Ask Tana") and hasSetTextAction().not() and hasClickAction()).performClick()
-        compose.waitUntil(10_000) { seen("Summarise this week’s meetings") }
     }
 
     @Test fun quickAddWaitsForATitle() {

@@ -26,7 +26,6 @@ const SHARED = /^(ios\/engine\/|sdk\/|main\/(timeline|settings|state|mcp-server)
 // feature is not here, and does not come to the phones by itself.
 const MIRRORED = [
   [/^(main|renderer)\/timeline\.js$/, 'the Timeline', 'Timeline.swift, Timeline.kt'],
-  [/^(renderer\/chat\.js|sdk\/chat\.js)$/, 'chats and Ask Tana', 'Pages.swift and Shell.swift, Pages.kt and Shell.kt'],
   [/^(task\.(js|html)|main\/views\.js)$/, 'Quick Add', 'QuickAdd.swift, QuickAdd.kt'],
   [/^(renderer\/access\.js|sdk\/access\.js)$/, 'Assigned to and Visible to', 'Pages.swift, Pages.kt (NodeDetails, VisibilitySheet)'],
   [/^(renderer\/document\.js|ios\/engine\/sensitive\.js)$/, 'sensitive marks', 'Timeline.swift and Pages.swift, Words.kt'],

@@ -4,7 +4,6 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.days
@@ -48,24 +47,6 @@ class ListsTest {
     @Test fun anOutlineFlattensWithDepthAndDropsBlankLines() {
         val flat = Lists.flat(listOf(Row("1", text = "One", children = listOf(Row("1.1", text = "Deeper"))), Row("2", text = " ")))
         assertEquals(listOf("1" to 0, "1.1" to 1), flat.map { it.first.id to it.second })
-    }
-
-    @Test fun aNameHeadsEachRunOfReplies() {
-        val a = Row("1", text = "Tana", chat = Row.Chat(author = "tana"))
-        val b = Row("2", text = "Tana", chat = Row.Chat(author = "tana"))
-        val mine = Row("3", chat = Row.Chat(mine = true))
-        assertTrue(Lists.named(a, null))
-        assertFalse(Lists.named(b, a))
-        assertFalse(Lists.named(mine, b))
-        assertTrue(Lists.named(b, Row("s", chat = Row.Chat(status = true))))
-    }
-
-    @Test fun dotsWaitTwoMinutesForAnAnswerAtMost() {
-        val mine = listOf(Row("1", chat = Row.Chat(mine = true)))
-        assertTrue(Lists.waiting(mine, now - 1.minutes, now))
-        assertFalse(Lists.waiting(mine, now - 3.minutes, now))
-        assertTrue(Lists.waiting(listOf(Row("2", chat = Row.Chat(streaming = true))), null, now))
-        assertFalse(Lists.waiting(listOf(Row("2", chat = Row.Chat(streaming = true), children = listOf(Row("w", text = "Hi")))), null, now))
     }
 
     @Test fun timesInWordsAsTheiPhoneSaysThem() {

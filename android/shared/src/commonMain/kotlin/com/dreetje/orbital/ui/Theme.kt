@@ -29,7 +29,7 @@ class Colors(
     val dark: Boolean,
     val page: Color, // the page, and the side menu behind it
     val grouped: Color, // behind a sheet's grouped rows (Settings, Quick Add)
-    val card: Color, // a group of rows, a menu, the composer
+    val card: Color, // a group of rows, a menu
     val text: Color,
     val secondary: Color, // passes AA on page and card (styles.css --muted)
     val tertiary: Color, // glyphs and placeholders only, never words to read
@@ -43,8 +43,6 @@ class Colors(
     val checkOff: Color,
     val checkInbox: Color,
     val face: Color,
-    val bubble: Color,
-    val bubbleText: Color,
     val redacted: Color, // styles.css .sensitive: #696d73 at 14 %
     val warning: Color,
     val danger: Color,
@@ -56,7 +54,7 @@ val Light = Colors(
     secondary = Color(0xFF666666), tertiary = Color(0xFFA3A3A8), separator = Color(0xFFE2E2E4), fill = Color(0xFFEEEEF0),
     fillQuiet = Color(0xFFF4F4F6), accent = Color(0xFF007AFF), link = Color(0xFF3F7EAA), done = Color(0xFF5A9670),
     checkOn = Color(0xFF6FAE82), checkOff = Color(0xFFE4E4E4), checkInbox = Color(0xFFC8C8C8), face = Color(0xFFE5E5EA),
-    bubble = Color(0xFFEAF3FD), bubbleText = Color(0xFF1B2B41), redacted = Color(0xFF696D73).copy(alpha = 0.14f),
+    redacted = Color(0xFF696D73).copy(alpha = 0.14f),
     warning = Color(0xFFA15C00), danger = Color(0xFFC62828),
 )
 
@@ -65,7 +63,7 @@ val Dark = Colors(
     secondary = Color(0xFFA0A5A8), tertiary = Color(0xFF6B7073), separator = Color(0xFF34383A), fill = Color(0xFF2C3032),
     fillQuiet = Color(0xFF232628), accent = Color(0xFF0A84FF), link = Color(0xFF7FB8DD), done = Color(0xFF5A9670),
     checkOn = Color(0xFF5B976C), checkOff = Color(0xFF3A3E40), checkInbox = Color(0xFF5D6467), face = Color(0xFF33373A),
-    bubble = Color(0xFF1E3D7B), bubbleText = Color(0xFFE8EEFF), redacted = Color(0xFF8C9196).copy(alpha = 0.22f),
+    redacted = Color(0xFF8C9196).copy(alpha = 0.22f),
     warning = Color(0xFFF0A33C), danger = Color(0xFFF28B82),
 )
 
@@ -96,10 +94,6 @@ object Rail {
 val LocalRailTime = staticCompositionLocalOf { Rail.time }
 
 val LocalColors = staticCompositionLocalOf { Light }
-
-// How much of the page's foot a floating composer covers (the iPhone's .safeAreaInset(edge: .bottom)): a list under it
-// scrolls on past it by this much, so its last row can still come up above the composer
-val LocalBottomInset = staticCompositionLocalOf { 0.dp }
 
 // SwiftUI's springs, which the iPhone's moves are written in, as Compose springs: SwiftUI's bounce b is a damping ratio
 // of 1 - b, and its duration d (the time to settle, near enough) a stiffness of (2π / d)². .snappy is bounce 0.15 and

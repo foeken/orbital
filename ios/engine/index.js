@@ -8,7 +8,6 @@ import { createTanaClient, derivePeerId } from '../../sdk';
 import { STATE_TYPES, initDocument, readNode, readSearch, rowLimit, setAssignees, ulid } from '../../sdk/node';
 import { insertAfter, insertImage, readOutline } from '../../sdk/content';
 import { initImage, uploadFile } from '../../sdk/assets';
-import { addMessage, chatRows, triggerReply } from '../../sdk/chat';
 import { datePins, pinDate, sidebarTree, unpinDate } from '../../sdk/pins';
 import { completedInWindow, liveTrigger, searchQueryParams, searchQueryToFilter } from '../../sdk/query';
 import { definitions, fieldDefinition, parseKey, setFieldText } from '../../sdk/fields';
@@ -141,7 +140,7 @@ const redact = (rows) => demo(mark(rows, secret())); // marked sensitive, then m
 // The documents this page opened or ticked (open, toggle) kept a while, and those only looked at let go of (held.js)
 const held = createHeld(() => S.client.sync, within), hold = held.hold, peek = (id, as = readNode) => held.peek(id, as);
 // A reference with no label of its own is named by the graph, as main/documents.js resolveReferences does; each name is
-// asked once, since a chat on screen is read again as its answer is written (live.js)
+// asked once, since a page on screen is read again as it changes (live.js)
 const names = new Map();
 async function titled(rows) {
   const refs = [], walk = (list) => list.forEach((r) => { if (r.reference && !r.reference.label) refs.push(r); walk(r.children || []); });
@@ -177,36 +176,12 @@ async function searchRows(doc) {
   return rows.map(({ n, group }) => ({ ...listRow(byId.get(n.id)), group, ...(n.state ? { assignees: n.assignees, people: n.assignees.map(name) } : {}) }));
 }
 
-// What you type in the composer, written into a chat as Tana writes a message and Tana asked to answer, as the desktop
-// sends one (main/documents.js sendChat); the answer arrives as live updates to the chat, which the chat screen reads.
-// Someone else's chat is checked first, with the desktop's rule (canWriteDoc: sdk/access canWrite), so a chat you can
-// only read never keeps a message that did not reach Tana. Answers { id, warning }: the warning when Tana did not take
-// the message up, which is sent all the same.
-async function say(id, text) {
-  const doc = await hold(id);
-  if (doc.writeDenied || !(await writable(doc))) throw new Error('You can read this chat but not write in it');
-  const words = await message(text);
-  let messageId;
-  doc.transact((loro) => { messageId = addMessage(loro, words); });
-  return answered(id, messageId, doc.data.get('ownerUri'));
-}
-// a message as addMessage takes it: its words, and who sent it by uri and by name
-const message = async (text) => ({ text, byUri: S.me.userUri, senderName: (await members().catch(() => [])).find((m) => m.id === S.me.userUri)?.title || (S.me.user || {}).email });
-// The message is in the chat either way: Tana not taking it up is a warning under the composer, not a failed send, or
-// the composer would offer to send it again (main/documents.js askReply answers it the same way)
-async function answered(id, messageId, ownerUri) {
-  // without the page's cookies: Tana's AI refuses a request that carries both them and the token (auth/multiple-auth-mechanisms)
-  const fetch = (url, init) => globalThis.fetch(url, { ...init, credentials: 'omit' });
-  const warning = await triggerReply({ chatUri: id, messageId, ownerUri, getAccessToken, fetch }).then(() => null, (e) => 'Sent, but Tana did not answer: ' + (e && e.message || e));
-  return JSON.stringify({ id, warning });
-}
 // main/documents.js accessContext and canWriteDoc: write access to a document, from its participants and owners
 async function access() {
   const c = claims(await getAccessToken());
   // the owners and the org it reads go through hold, so they are let go of like every other document read here
   return { sync: { subscribe: (uri) => hold(uri) }, graph: S.client.graph, orgDocUri: S.me.orgDocUri, orgAdmin: c.org_id === S.me.orgId && ['admin', 'owner'].includes(c.role) };
 }
-const writable = async (doc) => canWrite(readNode(doc), S.me.userUri, await access()).catch(() => false);
 
 // Quick Add Task's types (task.js, main/documents.js taskTypes and customCreation): the types with a workflow that apply
 // to documents and that you may create in (a space's type keeps its tasks in that space). Each type is read and let go
@@ -383,18 +358,14 @@ window.orbital = {
   why: () => answer, // what Tana last said about the session, for the app's sign-in log
   email: () => (last && last.user && last.user.email) || null,
   account: () => (S.me ? S.me.userUri + '@' + S.me.orgId : null), // who in which workspace, as the settings mirror keys it (stand-ins.js ns): what the app keeps its saved Timeline for
-  // Zooming into a node: what it holds, as the desktop's page for it shows. A chat is its conversation (sdk/chat.js,
-  // docs/CHATS.md), a saved search its results, a meeting its attendees, your notes and its summary, anything else its
-  // outline (sdk/content.js).
+  // Zooming into a node: what it holds, as the desktop's page for it shows. A saved search its results, a meeting its
+  // attendees, your notes and its summary, anything else its outline (sdk/content.js). The phones never open a chat.
   async open(id) {
     await settled();
     const kind = id.split(':')[1];
     const doc = await hold(id), n = readNode(doc);
     let rows = [], summary, notes, attendees;
-    if (kind === 'chat') {
-      const names = new Map((await members().catch(() => [])).map((m) => [m.id, m.title])), messages = doc.data.get('messages');
-      rows = chatRows(messages ? messages.toJSON() : [], { authorName: (uri) => names.get(uri), me: S.me.userUri, streamingId: doc.data.get('streamingMessageId') });
-    } else if (kind === 'search') rows = await searchRows(doc);
+    if (kind === 'search') rows = await searchRows(doc);
     else if (kind === 'event') ({ summary, notes, attendees } = await meeting(id, doc));
     else rows = named(readOutline(doc));
     // heard from now on (live.js): its own document, and for a saved search or a meeting the list its rows come from,
@@ -409,23 +380,6 @@ window.orbital = {
   // An outline's image (Row.image), fetched by the app itself as main/images.js does (sdk/assets.js fetchImage): the
   // redirect and the CDN's cookie it needs are out of a page's reach. refresh: Tana refused the last one.
   token: async (refresh) => JSON.stringify(await getAccessToken({ refresh: !!refresh })),
-  // Ask Tana from the composer: a new chat, yours alone and untitled as Tana starts one so its AI names it after the first
-  // answer (main/documents.js newChat), with what you typed as its first message. Answers the chat's id.
-  // The message is written with the chat, in one go: a chat that is slow to reach Tana still arrives with its message,
-  // never empty, and the composer is told it is saved rather than offered to send it again.
-  async ask(text) {
-    const id = 'tana:chat:' + ulid(), words = await message(text);
-    let messageId;
-    const doc = await hold(id, (loro) => {
-      initDocument(loro, 'New chat', S.me.userUri, { kind: 'chat' });
-      loro.getMap('data').delete('title');
-      loro.getMap('data').set('titleAutoGenerated', true);
-      messageId = addMessage(loro, words);
-    }).catch((e) => ({ failed: e }));
-    if (doc.failed) return JSON.stringify({ id, warning: 'Saved, but Tana could not be reached yet: ' + (doc.failed.message || doc.failed) });
-    return answered(id, messageId, doc.data.get('ownerUri'));
-  },
-  send: (id, text) => say(id, text), // a follow-up in a chat
   // Every saved search of tasks you can see (listsTasks), the ones pinned to your sidebar first in their order there, each with its icon (glyph)
   // the ones pinned to your sidebar first, in its order (sections included), then the rest, newest first
   async searches() {

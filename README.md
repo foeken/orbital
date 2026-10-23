@@ -85,12 +85,12 @@ window and the API key stay on the machine.
 The phone apps are for the moments away from the desk, not a second outliner. Both open on the
 Timeline — what others changed in the nodes you watch, your meetings, the tasks that landed in your
 Inbox — with a side menu for your saved searches, and pull to refresh. Opening a node shows its
-outline, its chat or its meeting, with who it is assigned to and who can see it; both can be changed
+outline or its meeting, with who it is assigned to and who can see it; both can be changed
 there, and Orbital asks to grant access when a new assignee could not see the node. A long press on a
 row assigns it, moves it back to the Inbox, pins it to today, marks it sensitive or deletes it. The +
 at the top right is Quick Add: a task with a title and a type, or a photo that ChatGPT reads into a
-task or a note; words or an image shared to Orbital from another app open there too. Ask Tana starts a
-chat, typed or dictated.
+task or a note; words or an image shared to Orbital from another app open there too. Chats stay on the
+Mac.
 
 Auto-translate, sensitive marks (blurred until you shake the phone, or turn on Show sensitive items in
 Settings), demo mode and the two AI models are the desktop's own, and they follow you between devices

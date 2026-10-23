@@ -13,7 +13,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-// Dictation in Quick Add and the Ask Tana composer, as Codex dictates (ios/Orbital/Dictation.swift): the microphone
+// Dictation in Quick Add, as Codex dictates (ios/Orbital/Dictation.swift): the microphone
 // recorded with its level sampled for the dots that move while you speak, then sent to ChatGPT as a whole once stopped,
 // its words handed to whoever is being dictated into.
 @Stable
@@ -77,7 +77,7 @@ class Dictation(private val platform: Platform, private val scope: CoroutineScop
         return heard?.await() ?: true
     }
 
-    // Quick Add's Add, the composer's Send and Assign to's Assign (ios/Orbital/Dictation.swift the same): pressed while
+    // Quick Add's Add and Assign to's Assign (ios/Orbital/Dictation.swift the same): pressed while
     // listening or writing down, the words are waited for and added to what is typed (into), and settling says so
     // meanwhile; false when they did not come, so what was said is never sent without it. At once when nothing is dictated.
     suspend fun settled(into: (String) -> Unit): Boolean {

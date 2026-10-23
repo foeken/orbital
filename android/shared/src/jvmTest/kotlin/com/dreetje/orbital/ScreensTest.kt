@@ -113,14 +113,6 @@ class ScreensTest {
         assertTrue(onAllWithText("Summary").isEmpty())
     }
 
-    @Test fun askTanaOpensTheChat() = sample {
-        val field = onNode(hasContentDescription("Ask Tana") and androidx.compose.ui.test.hasSetTextAction())
-        field.performClick()
-        field.performTextInput("Summarise this week")
-        onNode(hasContentDescription("Ask Tana") and androidx.compose.ui.test.hasSetTextAction().not() and androidx.compose.ui.test.hasClickAction()).performClick()
-        waitUntil(timeoutMillis = 5000) { onAllWithText("Summarise this week’s meetings").isNotEmpty() }
-    }
-
     @Test fun quickAddWaitsForATitle() = sample {
         onNodeWithContentDescription("Quick Add Task").performClick()
         waitUntil(timeoutMillis = 3000) { onAllWithText("Quick Add").isNotEmpty() }

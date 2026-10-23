@@ -117,7 +117,7 @@ The documentation neither supports nor rules out phone apps:
   ASWebAuthenticationSession (iPhone) or a Custom Tab (Android) with the app listening on `127.0.0.1` while it stays
   in front (an implementation guess, not documentation). **It needs a test on a real device and, for anything shared
   beyond a test build, OpenAI's confirmation.**
-- **Dictation.** Quick Add and Ask Tana dictation call ChatGPT's `/transcribe`. The preview limitations exclude the
+- **Dictation.** Quick Add dictation calls ChatGPT's `/transcribe`. The preview limitations exclude the
   transcription API, audio and video input and the Files upload API, so dictation cannot move to SIWC; it needs
   another route (the phone's own speech recognition is the obvious one) or stays off.
 - **Everything else** the phones ask (Auto-translate, reading an image, the model list) maps to `/v1/responses` and

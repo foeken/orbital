@@ -1,7 +1,7 @@
 import SwiftUI
 
 // The app's frame, after the Codex and ChatGPT apps: a side menu behind the page (the Timeline, your saved searches and
-// settings), the page with the menu button and its title, and a composer at the bottom that starts a chat with Tana.
+// settings), and the page with the menu button and its title.
 // The bars are the system's, so they are Liquid Glass with nothing of ours drawn over them.
 struct Shell: View {
     let engine: Engine
@@ -15,8 +15,6 @@ struct Shell: View {
 
     @State private var page = Page.timeline
     @State private var path: [String] = [] // the nodes zoomed into from the page, as a push each
-    @State private var notes: [String: String] = [:] // chat id -> what its first message's send had to say, for the chat's own composer
-    @State private var asked: [String: Date] = [:] // chat id -> when Ask Tana sent its first message, whose answer it waits for
     @State private var searches: [Page] = []
     @State private var icons: [String: UIImage] = [:] // saved search id -> the icon it was given in Orbital
     @State private var secret: Set<String> = [] // the saved searches marked sensitive, drawn so in the menu too
@@ -35,7 +33,7 @@ struct Shell: View {
             // front: one page on a screen as square as an iPhone Duo's, either way up (any other iPhone's short side is
             // under 0.6 of its long one)
             let wide = Self.wide(screen), front = !wide && min(screen.width, screen.height) / max(screen.width, screen.height) > 0.6
-            // corner: + at the bottom right, beside Ask Tana, where iOS keeps no side strip: two columns, or an unfolded
+            // corner: + at the bottom right, where iOS keeps no side strip: two columns, or an unfolded
             // iPhone Duo upright (its long side about 890 pt; the front screen's is under 700)
             content(menuWidth: Self.menuWidth(for: proxy.size.width), wide: wide, front: front,
                     corner: wide || (front && max(screen.width, screen.height) >= 800))
@@ -71,18 +69,14 @@ struct Shell: View {
                     Group {
                         switch page {
                         // the Tasks search beside the Timeline when there is room, else the first search in the menu
-                        case .timeline: TimelineScreen(engine: engine, tasks: tasks, wide: wide, ask: ask, add: { adding = true })
+                        case .timeline: TimelineScreen(engine: engine, tasks: tasks, wide: wide, add: { adding = true })
                         case .search(let id, _): NodeScreen(engine: engine, id: id, titled: false).id(id)
                         }
                     }
-                    // front: under the side strip, empty down there, so it sits as far from the screen's right edge as its left
-                    // corner: + beside it at the bottom right (CornerAdd)
+                    // corner: + at the bottom right (CornerAdd)
                     .safeAreaInset(edge: .bottom) {
-                        if !(wide && page == .timeline && tasks != nil) { // two columns: under the tasks column (TimelineScreen)
-                            HStack(alignment: .bottom, spacing: 0) {
-                                Composer(lifts: !corner, send: ask).ignoresSafeArea(.container, edges: front ? .trailing : [])
-                                if corner { CornerAdd(engine: engine) { adding = true } }
-                            }
+                        if corner, !(wide && page == .timeline && tasks != nil) { // two columns: under the tasks column (TimelineScreen)
+                            CornerAdd(engine: engine) { adding = true }.frame(maxWidth: .infinity, alignment: .trailing)
                         }
                     }
                     // a bar of its own: what scrolls under the title fades out there, as under the top bar
@@ -91,10 +85,10 @@ struct Shell: View {
                     }
                     .modifier(Card(on: front, open: menu, shift: shift, dark: scheme == .dark, close: { show(false) }))
                 }
-                // wide (an unfolded iPhone Duo): + at the bottom right, beside Ask Tana (CornerAdd). In the side strip it made
+                // wide (an unfolded iPhone Duo): + at the bottom right (CornerAdd). In the side strip it made
                 // the strip come and go as a node opened over it, and the bar jumped; a node's back button went down it too.
                 .modifier(TopBar(on: wide)) // wide: no side strip, the menu and back buttons in the top bar
-                .navigationDestination(for: String.self) { NodeScreen(engine: engine, id: $0, note: notes[$0], asked: asked[$0]).modifier(TopBar(on: wide)) }
+                .navigationDestination(for: String.self) { NodeScreen(engine: engine, id: $0).modifier(TopBar(on: wide)) }
                 .navigationTitle(front ? "" : page.title) // front: the title slides with the page, below
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -119,11 +113,10 @@ struct Shell: View {
             return .handled
         })
         .task(id: engine.phase) { await loadSearches() }
-        // However it opens (the button, a swipe): the composer's keyboard goes, and the saved searches are read again, so
-        // one pinned or given an icon on the Mac since shows up
+        // However it opens (the button, a swipe): the saved searches are read again, so one pinned or given an icon on
+        // the Mac since shows up
         .onChange(of: menu) {
             guard menu else { return }
-            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             Task { await loadSearches() }
         }
         // A sideways swipe anywhere, the menu included: the page follows the finger and settles open or shut, as the
@@ -202,11 +195,6 @@ struct Shell: View {
             Button { adding = true } label: { AddGlyph(busy: engine.adding > 0) }
                 .accessibilityLabel("Quick Add Task").accessibilityValue(engine.adding > 0 ? "Adding" : "")
         }
-    }
-
-    // Ask Tana: a new chat, opened as it starts, its warning shown there
-    private func ask(_ text: String) async throws -> String? {
-        let sent = try await engine.ask(text); notes[sent.id] = sent.warning; asked[sent.id] = .now; path.append(sent.id); return nil
     }
 
     // The Share extension opens Orbital with orbital-share://; what it shared waits until Orbital is in front, should iOS
@@ -302,7 +290,7 @@ private struct TopBar: ViewModifier {
     }
 }
 
-// + at the bottom right of a wide screen, in Ask Tana's row so the box, open or not, keeps clear of it
+// + at the bottom right of a wide screen
 struct CornerAdd: View {
     let engine: Engine
     let add: () -> Void
@@ -385,7 +373,6 @@ struct SideMenu: View {
                 .buttonStyle(.glass).buttonBorderShape(.circle).accessibilityLabel("Settings")
                 .padding(.horizontal, 12).padding(.bottom, 8)
         }
-        .ignoresSafeArea(.keyboard) // the composer's keyboard does not squeeze the menu
     }
 
     // VoiceOver's way to reorder, which a long-press drag is not
@@ -415,85 +402,5 @@ struct SideMenu: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(page == item ? .isSelected : [])
-    }
-}
-
-// The composer, as the Codex app has it: what you type goes to Tana, as a new chat from the page (Shell) or a follow-up
-// in a chat (ChatView). The words go the moment it is sent, and come back with the reason if Tana refuses them; a
-// message sent that Tana did not answer stays sent, with the warning send hands back shown under the box.
-struct Composer: View {
-    var prompt = "Ask Tana"
-    var note: String? // a line to start with (NodeScreen: what the send that opened this chat said)
-    var lifts = true // up off the bottom while you type; false where + sits beside it (CornerAdd), level with it
-    let send: (String) async throws -> String?
-    @State private var text = CommandLine.arguments.contains("-typing") ? "Can you move the offsite to Thursday?" : "" // -typing: the open card, for design shots
-    @State private var failure: String?
-    @State private var noted = false
-    @State private var sending = false
-    @State private var dictation = Dictation() // dictating, on the open card (Dictation.swift)
-    @FocusState private var focused: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        let empty = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        // Codex's composer: a capsule at rest, a card while you type in it (the words on top, send in its corner)
-        let busy = dictation.busy // listening, or writing down what was said
-        let open = focused || !empty || busy
-        VStack(spacing: 6) {
-            if let failure = failure ?? dictation.problem {
-                Text(failure).font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).transition(.opacity)
-            }
-            // The words set the height: at rest a line of body text with 12 pt above and below it (46 pt, a capsule with
-            // this radius), open the words with room under them for the send button's row. The button sits in the
-            // bottom-right corner, the same distance from the edge on both sides whatever the text field measures.
-            TextField(prompt, text: $text, axis: .vertical).lineLimit(1...6).focused($focused)
-                .padding(.leading, 18)
-                .padding(.trailing, open ? 18 : 52)
-                .padding(.top, open ? 16 : 12)
-                .padding(.bottom, open ? 60 : 12)
-                .overlay(alignment: .bottom) {
-                    // the card's bottom row: dictating, only while you are in the card (or it still listens), then send;
-                    // while it listens ✕, the dots and ■ take the row, as Codex's own dictation bar
-                    HStack(spacing: 8) {
-                        if !dictation.recording { Spacer(minLength: 0) }
-                        if focused || busy { Dictate(dictation: dictation, into: $text) }
-                        Button { Task { await submit() } } label: {
-                            // the Codex app's send: a grey circle while there is nothing to send, blue once there is
-                            Image(systemName: "arrow.up").font(.body.weight(.semibold))
-                                .foregroundStyle(empty && !busy ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.white))
-                                .frame(width: 34, height: 34)
-                                .background(Circle().fill(empty && !busy ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.blue)))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled((empty && !busy) || sending || dictation.settling)
-                        .accessibilityLabel(prompt)
-                    }
-                    .padding(open ? 10 : 6)
-                }
-                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 23, style: .continuous))
-        }
-        .padding(.leading, open ? 14 : 36) // inset as the Codex app's composer is at rest; wider while you type, as its card is
-        .padding(.trailing, lifts ? (open ? 14 : 36) : 12) // beside + (CornerAdd): the usual gap to it
-        .padding(.bottom, focused && lifts ? 14 : 4) // clear of the keyboard while you type, as the Codex app's card is
-        .animation(reduceMotion ? nil : .snappy, value: open)
-        .animation(reduceMotion ? nil : .snappy, value: focused)
-        .animation(reduceMotion ? nil : .snappy, value: dictation.recording)
-        .onDisappear { dictation.cancel() } // the page left while listening: nothing kept
-        .onAppear { if !noted { failure = note; noted = true } }
-        .task { if CommandLine.arguments.contains("-typing") { try? await Task.sleep(for: .seconds(1)); focused = true } } // -typing: with the keyboard up
-    }
-
-    // Send, while listening or writing down too: listening stops and the words are waited for first, as Add in Quick Add
-    private func submit() async {
-        guard !dictation.settling, await dictation.settled(into: $text) else { return }
-        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !words.isEmpty else { return }
-        text = ""; focused = false; sending = true
-        do { let warning = try await send(words); withAnimation { failure = warning } }
-        catch {
-            text = text.isEmpty ? words : words + "\n\n" + text // the unsent words come back, ahead of anything typed since
-            withAnimation { failure = error.localizedDescription }
-        }
-        sending = false
     }
 }
