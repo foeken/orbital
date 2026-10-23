@@ -701,19 +701,6 @@ final class Engine: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         }
     }
 
-    // A message written into a chat: which chat, and a warning when Tana did not take it up (it is sent all the same)
-    struct Sent: Decodable { let id: String; let warning: String? }
-    // Ask Tana (orbital.ask): a new chat with what you typed as its first message
-    func ask(_ text: String) async throws -> Sent {
-        if Self.isSample { return Sent(id: "tana:chat:000000000000000000000000c1", warning: nil) }
-        return try await call("return await orbital.ask(text)", ["text": text])
-    }
-    // a follow-up in a chat (orbital.send)
-    func send(_ text: String, to id: String) async throws -> Sent {
-        if Self.isSample { return Sent(id: id, warning: nil) }
-        return try await call("return await orbital.send(id, text)", ["id": id, "text": text])
-    }
-
     struct Failure: LocalizedError { let errorDescription: String? }
     private func call<T: Decodable>(_ js: String, _ arguments: [String: Any]) async throws -> T {
         try await call(js, arguments) { try JSONDecoder().decode(T.self, from: Data($0.utf8)) }

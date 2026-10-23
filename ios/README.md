@@ -26,7 +26,7 @@ sqim upload --device . --build --project Orbital.xcodeproj --scheme Orbital --te
 
 Launch arguments, all on invented content (`Orbital/timeline-sample.json`, `Orbital/pages-sample.json`): `-sample`
 (no Tana at all), with `-history` (the day's entries only), `-zoom <id>` (a node open), `-menu` (the menu open),
-`-menudemo` (the menu opens and closes), `-settings`, `-connect` (with `-settings`: Connect your personal agent, on an invented code), `-add` and `-typing`. `sh manual/scenes/iphone.sh` takes the
+`-menudemo` (the menu opens and closes), `-settings`, `-connect` (with `-settings`: Connect your personal agent, on an invented code) and `-add`. `sh manual/scenes/iphone.sh` takes the
 manual's iPhone pictures with them.
 
 ## Checks
@@ -35,7 +35,7 @@ manual's iPhone pictures with them.
 itself, driven in a vm made to look like the session page.
 
 `OrbitalUITests` drives the app itself on `-sample`, finding everything by the label VoiceOver reads: the Timeline, ticking a
-task, a sensitive task's hidden words, the menu and a saved search, a meeting's page, Ask Tana, Quick Add and Settings. It runs
+task, a sensitive task's hidden words, the menu and a saved search, a meeting's page, Quick Add and Settings. It runs
 locally only, in a few minutes, with the Android app's screen tests beside it (`scripts/phones.sh`):
 
 ```sh

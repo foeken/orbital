@@ -1,7 +1,7 @@
 import SwiftUI
 
 // One row as the desktop renderer gets it: of the Timeline (main/timeline.js), a saved search or a meeting's documents
-// (ios/engine/index.js listRow), an outline (sdk/content.js) or a chat (sdk/chat.js); only what this draws. Encoded again
+// (ios/engine/index.js listRow) or an outline (sdk/content.js); only what this draws. Encoded again
 // for the widgets (Engine.swift keepTimeline), with a sensitive row's words taken out.
 struct Row: Codable, Identifiable {
     let id: String
@@ -26,7 +26,6 @@ struct Row: Codable, Identifiable {
     let type: String?
     let meta: String?
     let note: Bool?
-    let chat: Chat?
     let sensitive: Bool? // marked sensitive in Orbital: drawn blurred until a shake shows it (ios/engine/sensitive.js)
     let group: String? // the section a saved search files it under (ios/engine/arrange.js)
     let glyph: String? // a saved search's own icon, a PNG in base64 (ios/engine/index.js iconPng)
@@ -38,7 +37,6 @@ struct Row: Codable, Identifiable {
     struct Marks: Codable { let bold: Bool?; let italic: Bool?; let strike: Bool?; let code: Bool?; let link: String? }
     struct Ref: Codable { let uri: String; var label: String? }
     struct Picture: Codable { let uri: String? }
-    struct Chat: Codable { let mine: Bool?; let status: Bool?; let streaming: Bool?; let author: String? }
     struct Person: Codable { let name: String }
     struct Free: Codable { let from: Double; let until: Double }
     struct Info: Codable {
@@ -151,8 +149,7 @@ struct TimelineScreen: View {
     let engine: Engine
     var tasks: Shell.Page? // the saved search of tasks, its own column when there is room (Shell)
     let wide: Bool // room for two columns (an unfolded iPhone Duo, Shell.wide): the Timeline left, the tasks right
-    let ask: (String) async throws -> String? // Ask Tana, under the tasks column when there are two (Shell has it under the page otherwise)
-    let add: () -> Void // Quick Add, the + beside Ask Tana there
+    let add: () -> Void // Quick Add, the + under the tasks column when there are two (Shell has it under the page otherwise)
     @State private var shown = true // the rows: hidden while the skeleton is up, and in only once it has gone
     @State private var half: CGFloat = 0 // the Timeline's width that puts the line between them in the screen's middle, on the fold
 
@@ -172,7 +169,7 @@ struct TimelineScreen: View {
                         .scrollEdgeEffectStyle(.soft, for: .top)
                     .padding(.leading, 12) // room from the line in the middle
                     .frame(maxWidth: .infinity)
-                    .safeAreaInset(edge: .bottom) { HStack(alignment: .bottom, spacing: 0) { Composer(lifts: false, send: ask); CornerAdd(engine: engine, add: add) } }
+                    .safeAreaInset(edge: .bottom) { CornerAdd(engine: engine, add: add).frame(maxWidth: .infinity, alignment: .trailing) }
                 }
                 // up in the bar: the headings level with the menu button (26 pt down, measured)
                 .ignoresSafeArea(.container, edges: .top)
@@ -190,7 +187,6 @@ struct TimelineScreen: View {
         .onChange(of: building, initial: true) { _, now in
             if now { shown = false } else { withAnimation(.easeIn(duration: 0.25).delay(0.15)) { shown = true } }
         }
-        .scrollDismissesKeyboard(.interactively) // scrolling the Timeline tucks the composer's keyboard away
         .refreshable { await engine.refresh() }
         // the free time ends when the next meeting starts: read the page again then, so neither stays on screen past it
         .task(id: free?.until) {

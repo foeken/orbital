@@ -15,9 +15,7 @@ menu|-sample -menu|6
 search|-sample -zoom tana:search:0000000000000000000000000s1|6
 document|-sample -zoom tana:text:00000000000000000000000d01|6
 meeting|-sample -zoom tana:event:0000000000000000000000000d|6
-chat|-sample -zoom tana:chat:000000000000000000000000c1|6
 sensitive|-sample -zoom tana:text:0000000000000000000000000b|6
-ask|-sample -typing|8
 quickadd|-sample -add|7
 settings|-sample -settings|5'
 

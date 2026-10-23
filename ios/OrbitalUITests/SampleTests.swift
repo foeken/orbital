@@ -39,7 +39,7 @@ class SampleCase: XCTestCase {
 
     // Words typed as a finger types them: the field tapped until it has the keyboard. A fresh simulator first shows the
     // keyboard's own tip (slide to type) over it, and after a turn of the phone the first tap can land while the field is
-    // still moving: typeText then failed now and then with no keyboard focus (testLandscapeKeepsComposerAndSheetsUsable).
+    // still moving: typeText then failed now and then with no keyboard focus (testLandscapeKeepsSheetsUsable).
     fileprivate func type(_ text: String, into field: XCUIElement) {
         let focused = NSPredicate(format: "hasKeyboardFocus == true")
         for _ in 0..<3 where !focused.evaluate(with: field) {
@@ -175,14 +175,6 @@ final class SampleOpeningTests: SampleCase {
         XCTAssertFalse(app.buttons["Summary"].exists)
     }
 
-    func testAskTanaOpensTheChat() {
-        launch()
-        let field = app.textFields["Ask Tana"]
-        type("Summarise this week", into: field)
-        app.buttons["Ask Tana"].tap()
-        XCTAssert(app.navigationBars["Summarise this week’s meetings"].waitForExistence(timeout: 15))
-    }
-
     func testQuickAddWaitsForATitle() {
         launch()
         app.buttons["Quick Add Task"].tap()
@@ -304,16 +296,11 @@ final class SampleSettingsTests: SampleCase {
         XCTAssert(app.navigationBars["Design review"].waitForExistence(timeout: 15))
     }
 
-    func testLandscapeKeepsComposerAndSheetsUsable() {
+    func testLandscapeKeepsSheetsUsable() {
         launch()
         defer { XCUIDevice.shared.orientation = .portrait }
         XCUIDevice.shared.orientation = .landscapeLeft
-        let composer = app.textFields["Ask Tana"]
-        type("Prepare the landscape review", into: composer)
-        XCTAssert(app.buttons["Ask Tana"].exists)
-
         XCUIDevice.shared.orientation = .landscapeRight
-        XCTAssert(app.buttons["Ask Tana"].exists)
 
         // just after the turn the bar is still being laid out, and its + had no point to tap ("hit point {-1, -1}"): the
         // tap went nowhere and Quick Add never came

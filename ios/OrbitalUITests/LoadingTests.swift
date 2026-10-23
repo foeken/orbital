@@ -2,7 +2,7 @@ import XCTest
 
 // Tana that never answers (-stall, Engine.swift): a request inside Tana's page has no time limit of WebKit's, so a page
 // that never connects, or a first Timeline read that never comes back, left the Timeline building itself for good, with
-// the Ask Tana composer under it and nothing to say why (a TestFlight report). Past the app's patience (-patience 3 here,
+// nothing to say why (a TestFlight report). Past the app's patience (-patience 3 here,
 // 30 s in the app) it says so instead, with Try again and the Details to send.
 final class LoadingTests: XCTestCase {
     private var app: XCUIApplication!
