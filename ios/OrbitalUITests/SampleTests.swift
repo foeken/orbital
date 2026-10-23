@@ -140,7 +140,7 @@ final class SampleTests: SampleCase {
 
 }
 
-// The menu, a meeting, Ask Tana, Quick Add and links from outside
+// The menu, a meeting, Quick Add and links from outside
 final class SampleOpeningTests: SampleCase {
     func testMenuOpensASavedSearch() {
         launch()

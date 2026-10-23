@@ -5,7 +5,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 // How the screens lay rows out, apart from drawing them: the Timeline's days, a search's sections, an outline
-// flattened, a chat's names and its waiting dots, and the free time's words (ios/Orbital Timeline.swift, Pages.swift)
+// flattened, and the free time's words (ios/Orbital Timeline.swift, Pages.swift)
 object Lists {
     // Today, Yesterday and each day before, by the day the engine put each row under (renderer/timeline.js
     // timelineGroups, ios/engine/labels.js); the blocks above the days (today's tasks, the free time, the meetings to
@@ -31,18 +31,6 @@ object Lists {
     // the outline flattened, each row with how deep it sits: nothing folds on the phone, everything shows
     fun flat(rows: List<Row>, depth: Int = 0): List<Pair<Row, Int>> =
         rows.filter { !it.blank }.flatMap { listOf(it to depth) + flat(it.children ?: emptyList(), depth + 1) }
-
-    // the name over a run of replies, not over each (renderer/chat.js chatNameEl): a status line breaks the run
-    fun named(row: Row, prev: Row?): Boolean =
-        row.chat?.mine != true && row.chat?.status != true && (prev == null || prev.chat?.status == true || prev.chat?.author != row.chat?.author)
-
-    // Tana writing (its message streaming with no words yet), or your message still unanswered for two minutes at
-    // most (renderer/chat.js CHAT_WAIT)
-    fun waiting(rows: List<Row>, since: Instant?, now: Instant): Boolean {
-        val last = rows.lastOrNull { it.chat?.status != true }
-        if (last?.chat?.streaming == true) return last.children.isNullOrEmpty()
-        return last?.chat?.mine == true && since != null && now - since < 2.minutes
-    }
 
     // a day as Tana mentions one (sdk/dates.js): tana:plaindate:YYYY-MM-DD
     fun plainDate(year: Int, month: Int, day: Int) = "tana:plaindate:" + year.toString().padStart(4, '0') + "-" + month.toString().padStart(2, '0') + "-" + day.toString().padStart(2, '0')

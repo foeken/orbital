@@ -126,10 +126,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// The iPhone's ios/Orbital/Shell.swift: the side menu, the page, and the composer under it
+// The iPhone's ios/Orbital/Shell.swift: the side menu and the page
 
 // The app's frame, after the Codex and ChatGPT apps: a side menu behind the page (the Timeline, your saved searches and
-// settings), the page with the menu button and its title, and a composer at the bottom that starts a chat with Tana.
+// settings), and the page with the menu button and its title.
 // Wide windows (a tablet, an unfolded phone) keep the menu beside the page.
 @Composable
 fun Shell(engine: Engine, start: Start = Start()) {
@@ -138,14 +138,11 @@ fun Shell(engine: Engine, start: Start = Start()) {
     // what is open survives a rotation: the menu's page, the nodes zoomed into from it, and the sheets
     var page by rememberSaveable(stateSaver = listSaver<Menu, String>({ if (it is Menu.Search) listOf(it.id, it.title) else emptyList() }, { if (it.size == 2) Menu.Search(it[0], it[1]) else Menu.Timeline })) { mutableStateOf<Menu>(Menu.Timeline) }
     val path = rememberSaveable(saver = listSaver({ it.toList() }, { it.toMutableStateList() })) { mutableStateListOf<String>().apply { start.zoom?.let(::add) } } // the nodes zoomed into from the page
-    val notes = remember { mutableStateMapOf<String, String>() } // chat id -> what its first message's send had to say
-    val asked = remember { mutableStateMapOf<String, Instant>() } // chat id -> when Ask Tana sent its first message
     var searches by remember { mutableStateOf(listOf<Menu.Search>()) }
     var icons by remember { mutableStateOf(mapOf<String, ImageBitmap>()) } // saved search id -> the icon it was given in Orbital
     var secret by remember { mutableStateOf(setOf<String>()) } // the saved searches marked sensitive
     var settings by rememberSaveable { mutableStateOf(start.settings) }
     var adding by rememberSaveable { mutableStateOf(start.add) }
-    var composer by remember { mutableStateOf(0.dp) } // how tall the floating composer is
     val focus = LocalFocusManager.current
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
@@ -181,8 +178,8 @@ fun Shell(engine: Engine, start: Start = Start()) {
         val top = path.lastOrNull()
         if (nav.currentState != top || nav.targetState != top) { if (still) nav.snapTo(top) else nav.animateTo(top) }
     }
-    // however it opens (the button, a swipe), the composer's keyboard goes and the saved searches are read again, so one
-    // pinned or given an icon on the Mac since shows up
+    // however it opens (the button, a swipe), a keyboard goes and the saved searches are read again, so one pinned or
+    // given an icon on the Mac since shows up
     LaunchedEffect(drawer.targetValue) { if (drawer.targetValue) { focus.clearFocus(); loadSearches() } }
     LaunchedEffect(Unit) { if (start.menu) show(true); if (start.menuDemo) { delay(2000); show(true); delay(2000); show(false) } }
     // what was shared opens Quick Add on its own, over nothing else (Shell.swift: adding and settings shut). An image
@@ -265,28 +262,19 @@ fun Shell(engine: Engine, start: Start = Start()) {
                 move = { i, by -> val to = i + by; if (to in searches.indices) { searches = searches.toMutableList().apply { add(to, removeAt(i)) }; saveOrder(searches, engine) } },
                 settings = { settings = true })
         }
-        // One page: the menu's (its bar, the page, and the composer floating over its foot, as the iPhone's
-        // .safeAreaInset: the page scrolls on under it and fades out behind it), or a node zoomed into
+        // One page: the menu's (its bar and the page), or a node zoomed into
         val pageOf = @Composable { top: String? ->
             // a node zoomed into and the menu's page are kept apart: a saved search can be both
             pages.SaveableStateProvider(top?.let { "node:$it" } ?: "page:" + page.key) {
                 if (top == null) Column(Modifier.fillMaxSize().background(c.page).imePadding().navigationBarsPadding()) {
                     PageBar(page.title, onMenu = if (wide) null else ({ show(true) }), onAdd = { adding = true }, busy = engine.adding > 0)
                     Box(Modifier.weight(1f).fillMaxWidth()) {
-                        CompositionLocalProvider(LocalBottomInset provides composer) {
-                            when (val p = page) {
-                                Menu.Timeline -> TimelineScreen(engine, Modifier.fillMaxSize())
-                                is Menu.Search -> NodeScreen(engine, p.id, titled = false)
-                            }
-                        }
-                        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(composer + 16.dp)
-                            .background(Brush.verticalGradient(0f to c.page.copy(alpha = 0f), 0.45f to c.page.copy(alpha = 0.9f), 1f to c.page)))
-                        // a new chat, opened as it starts, its warning shown there
-                        Box(Modifier.align(Alignment.BottomCenter).onSizeChanged { composer = with(density) { it.height.toDp() } }) {
-                            Composer(engine) { text -> val sent = engine.ask(text); sent.warning?.let { notes[sent.id] = it }; asked[sent.id] = engine.now(); push(sent.id); null }
+                        when (val p = page) {
+                            Menu.Timeline -> TimelineScreen(engine, Modifier.fillMaxSize())
+                            is Menu.Search -> NodeScreen(engine, p.id, titled = false)
                         }
                     }
-                } else NodeScreen(engine, top, Modifier.background(c.page).imePadding().navigationBarsPadding(), note = notes[top], asked = asked[top], onBack = { pop() })
+                } else NodeScreen(engine, top, Modifier.background(c.page).imePadding().navigationBarsPadding(), onBack = { pop() })
             }
         }
         val content = @Composable { modifier: Modifier ->
@@ -525,77 +513,5 @@ private fun MenuItem(item: Menu, selected: Boolean, icon: ImageBitmap?, hidden: 
         if (icon != null) Image(icon, null, Modifier.size(22.dp), colorFilter = ColorFilter.tint(c.text))
         else Glyph(if (item is Menu.Search) "searchMenu" else "timelineMenu", Modifier.size(22.dp), c.text)
         Sensitive(hidden) { Words(item.title, style = Type.body.copy(fontWeight = FontWeight.Medium), maxLines = 1) }
-    }
-}
-
-// The composer, as the Codex app has it: what you type goes to Tana, as a new chat from the page (Shell) or a follow-up
-// in a chat (NodeScreen). A capsule at rest, a card while you type in it, the words on top and send in its corner.
-// The words go the moment it is sent, and come back with the reason if Tana refuses them; a message sent that Tana did
-// not answer stays sent, with the warning send hands back shown over the box.
-@Composable
-fun Composer(engine: Engine, prompt: String = "Ask Tana", note: String? = null, send: suspend (String) -> String?) {
-    val c = Theme.colors
-    val still = engine.platform.reduceMotion
-    var text by rememberSaveable { mutableStateOf("") }
-    var failure by remember { mutableStateOf(note) }
-    var sending by remember { mutableStateOf(false) }
-    var focused by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    val focus = LocalFocusManager.current
-    val dictation = remember { Dictation(engine.platform, engine.scope) }
-    DisposableEffect(Unit) { onDispose { dictation.cancel() } } // the page left while listening: nothing kept
-    val empty = text.isBlank()
-    val busy = dictation.busy
-    val open = focused || !empty || busy
-    val side by animateDpAsState(if (open) 14.dp else 36.dp, if (still) snap() else snappy())
-    val shape = RoundedCornerShape(23.dp)
-    fun append(said: String) { text = Dictation.join(text, said) }
-
-    // Send while listening or writing down too: listening stops and the words are waited for first
-    suspend fun submit() {
-        if (!dictation.settled(::append)) return
-        val words = text.trim()
-        if (words.isEmpty()) return
-        text = ""; focus.clearFocus(); sending = true
-        try {
-            failure = send(words)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            text = if (text.isEmpty()) words else words + "\n\n" + text // the unsent words come back, ahead of anything typed since
-            failure = e.message
-        }
-        sending = false
-    }
-
-    Column(Modifier.fillMaxWidth().padding(horizontal = side).padding(top = 4.dp, bottom = if (focused) 10.dp else 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        val line = failure ?: dictation.problem
-        if (line != null) Text(line, Modifier.padding(bottom = 6.dp), style = Type.footnote, color = c.secondary, textAlign = TextAlign.Center)
-        Box(Modifier.fillMaxWidth().shadow(if (c.dark) 0.dp else 8.dp, shape, ambientColor = Color.Black.copy(0.08f), spotColor = Color.Black.copy(0.12f))
-            .clip(shape).background(c.card).border(1.dp, c.separator, shape).animateContentSize(if (still) snap() else snappy())) {
-            BasicTextField(
-                text, { text = it },
-                Modifier.fillMaxWidth().heightIn(min = 46.dp).onFocusChanged { focused = it.isFocused }
-                    .padding(start = 18.dp, end = if (open) 18.dp else 52.dp, top = if (open) 15.dp else 12.dp, bottom = if (open) 58.dp else 12.dp)
-                    .semantics { contentDescription = prompt },
-                textStyle = Type.body.copy(color = c.text), cursorBrush = SolidColor(c.accent), maxLines = 6,
-                decorationBox = { inner -> Box { if (text.isEmpty()) Text(prompt, style = Type.body, color = c.secondary); inner() } },
-            )
-            // the card's bottom row: dictating, only while you are in the card (or it still listens), then send
-            Row(Modifier.align(Alignment.BottomEnd).then(if (dictation.recording) Modifier.fillMaxWidth() else Modifier).padding(if (open) 10.dp else 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (focused || busy) Dictate(dictation, engine) { append(it) }
-                Send(enabled = (!empty || busy) && !sending && !dictation.settling, label = prompt) { scope.launch { submit() } }
-            }
-        }
-    }
-}
-
-// the Codex app's send: a grey circle while there is nothing to send, blue once there is
-@Composable
-fun Send(enabled: Boolean, label: String, onClick: () -> Unit) {
-    val c = Theme.colors
-    RoundButton(label, 34.dp, if (enabled) c.accent else c.fill, enabled = enabled, onClick = onClick) {
-        Icon(Icons.Filled.ArrowUpward, null, Modifier.size(20.dp), if (enabled) Color.White else c.tertiary)
     }
 }

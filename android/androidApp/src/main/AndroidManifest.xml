@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- dictation in Quick Add and the composer, asked for the first time it is used -->
+    <!-- dictation in Quick Add, asked for the first time it is used -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />

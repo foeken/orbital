@@ -141,7 +141,7 @@ fun TimelineScreen(engine: Engine, modifier: Modifier = Modifier) {
 
     androidx.compose.runtime.CompositionLocalProvider(LocalRailTime provides timeWidth) { Box(modifier) {
         PullToRefreshBox(refreshing, { scope.launch { refreshing = true; engine.refresh(); refreshing = false } }, Modifier.fillMaxSize()) {
-            LazyColumn(Modifier.fillMaxSize().alpha(shown), contentPadding = PaddingValues(bottom = 12.dp + LocalBottomInset.current)) {
+            LazyColumn(Modifier.fillMaxSize().alpha(shown), contentPadding = PaddingValues(bottom = 12.dp)) {
                 val key = uniqueKeys()
                 if (hasToday) {
                     // one stop on the rail: the Today glyph, its words, the tasks hanging under them
@@ -196,7 +196,7 @@ fun TimelineScreen(engine: Engine, modifier: Modifier = Modifier) {
         }
         val error = engine.error
         if (error != null && rows.isNotEmpty()) {
-            Notice(error, Modifier.align(Alignment.BottomCenter).padding(bottom = LocalBottomInset.current))
+            Notice(error, Modifier.align(Alignment.BottomCenter))
         }
     } }
 }

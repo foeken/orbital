@@ -731,10 +731,6 @@ class Engine(
         !tasks.all { gone(it.id) }
     }
 
-    // Ask Tana: a new chat with what you typed as its first message; a follow-up in a chat
-    suspend fun ask(text: String): Sent = if (isSample) Sent("tana:chat:000000000000000000000000c1") else call("return await orbital.ask(text)", mapOf("text" to text))
-    suspend fun send(text: String, to: String): Sent = if (isSample) Sent(to) else call("return await orbital.send(id, text)", mapOf("id" to to, "text" to text))
-
     // A task's box: drawn in its new state at once, written by engine.js (orbital.toggle, the desktop's rule), and put
     // back with the reason if Tana refuses. The row stays where it is; the next read confirms it.
     suspend fun toggle(task: Row) {

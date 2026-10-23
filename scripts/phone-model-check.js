@@ -13,7 +13,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8').replace(/(
 const SWIFT = ['ios/Orbital/Timeline.swift', 'ios/Orbital/Engine.swift', 'ios/Orbital/Translator.swift'];
 const KOTLIN = ['android/shared/src/commonMain/kotlin/com/dreetje/orbital/Model.kt', 'android/shared/src/commonMain/kotlin/com/dreetje/orbital/Translator.kt'];
 // the engine's answers, each named the same on both sides (Row.Segment and friends nested in Row on both)
-const TYPES = ['Row', 'Segment', 'Marks', 'Ref', 'Chat', 'Person', 'Free', 'Info', 'Page', 'Setup', 'Member', 'Audience', 'Access', 'TaskType', 'Value', 'Preset', 'Field', 'Sent', 'Sample', 'Answer',
+const TYPES = ['Row', 'Segment', 'Marks', 'Ref', 'Person', 'Free', 'Info', 'Page', 'Setup', 'Member', 'Audience', 'Access', 'TaskType', 'Value', 'Preset', 'Field', 'Sample', 'Answer',
   'Agent', 'HandedTo', 'AgentList', 'LinkCode', 'LinkState', 'Linked']; // your Dot (ios/engine/agents.js)
 
 // the text between the bracket at i and the one that closes it
@@ -97,7 +97,6 @@ function row(r, at) {
   check('Row', r, at);
   (r.segments || []).forEach((s, i) => { check('Segment', s, at + '.segments[' + i + ']'); check('Marks', s.marks, at + '.marks'); check('Ref', s.mention, at + '.mention'); });
   check('Ref', r.reference, at + '.reference');
-  check('Chat', r.chat, at + '.chat');
   (r.people || []).forEach((p) => check('Person', p, at + '.people'));
   check('Info', r.timeline, at + '.timeline');
   if (r.timeline) check('Free', r.timeline.free, at + '.timeline.free');

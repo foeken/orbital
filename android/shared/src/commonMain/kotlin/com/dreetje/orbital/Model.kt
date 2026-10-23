@@ -9,7 +9,7 @@ import kotlin.time.Instant
 val json = Json { ignoreUnknownKeys = true; explicitNulls = false; coerceInputValues = true }
 
 // One row as the desktop renderer gets it: of the Timeline (main/timeline.js), a saved search or a meeting's documents
-// (ios/engine/index.js listRow), an outline (sdk/content.js) or a chat (sdk/chat.js); only what the app draws, as
+// (ios/engine/index.js listRow) or an outline (sdk/content.js); only what the app draws, as
 // ios/Orbital/Timeline.swift Row has it.
 @Serializable
 data class Row(
@@ -35,7 +35,6 @@ data class Row(
     val type: String? = null,
     val meta: String? = null,
     val note: Boolean? = null,
-    val chat: Chat? = null,
     val sensitive: Boolean? = null, // marked sensitive in Orbital: drawn barred until a shake shows it (ios/engine/sensitive.js)
     val group: String? = null, // the section a saved search files it under (ios/engine/arrange.js)
     val glyph: String? = null, // a saved search's own icon, a PNG in base64 (ios/engine/index.js iconPng)
@@ -47,7 +46,6 @@ data class Row(
     @Serializable data class Marks(val bold: Boolean? = null, val italic: Boolean? = null, val strike: Boolean? = null, val code: Boolean? = null, val link: String? = null)
     @Serializable data class Ref(val uri: String, val label: String? = null)
     @Serializable data class Image(val uri: String? = null) // none on a block whose image has no tanaUri (sdk/content.js)
-    @Serializable data class Chat(val mine: Boolean? = null, val status: Boolean? = null, val streaming: Boolean? = null, val author: String? = null)
     @Serializable data class Person(val name: String)
     @Serializable data class Free(val from: Double, val until: Double)
     @Serializable data class Info(
@@ -140,8 +138,6 @@ data class Access(
 @Serializable data class Preset(val uri: String, val title: String, val task: Boolean, val fields: Map<String, Value> = emptyMap())
 @Serializable data class Field(val key: String, val title: String, val kind: String, val options: List<String> = emptyList())
 
-// A message written into a chat: which chat, and a warning when Tana did not take it up (it is sent all the same)
-@Serializable data class Sent(val id: String, val warning: String? = null)
 
 // pages-sample.json: invented saved searches and pages for -sample
 @Serializable data class Sample(val searches: List<Row> = emptyList(), val pages: Map<String, Page> = emptyMap(), val access: Map<String, Access> = emptyMap())

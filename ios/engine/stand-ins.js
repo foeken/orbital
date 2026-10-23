@@ -83,7 +83,7 @@ module.exports = {
   rememberNodeHue() {},
   // sdk/chat.js hm, required when first asked: sdk/chat requires crypto, which the bundle makes this file (build.js)
   hm: (ms) => require('../../sdk/chat').hm(ms),
-  // the workspace's people, asked once per session (a chat on screen is read again as its answer is written); asked again after a failure
+  // the workspace's people, asked once per session (a page on screen is read again as it changes); asked again after a failure
   members: () => (people ||= S.client.graph.listNodes({ nodeTypes: ['user-profile'], limit: 500 })
     // emails: the addresses their profile is known by (main/rows.js emailsOf), for a meeting's attendees (index.js meeting)
     .then(({ nodes }) => nodes.map((n) => ({ id: n.id, title: memberTitle(n), emails: Object.entries(n.externalIds || {}).filter(([, kind]) => kind === 'email').map(([a]) => a.toLowerCase()) })), (e) => { people = null; throw e; })),

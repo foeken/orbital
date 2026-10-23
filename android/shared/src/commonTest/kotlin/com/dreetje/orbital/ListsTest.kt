@@ -50,24 +50,6 @@ class ListsTest {
         assertEquals(listOf("1" to 0, "1.1" to 1), flat.map { it.first.id to it.second })
     }
 
-    @Test fun aNameHeadsEachRunOfReplies() {
-        val a = Row("1", text = "Tana", chat = Row.Chat(author = "tana"))
-        val b = Row("2", text = "Tana", chat = Row.Chat(author = "tana"))
-        val mine = Row("3", chat = Row.Chat(mine = true))
-        assertTrue(Lists.named(a, null))
-        assertFalse(Lists.named(b, a))
-        assertFalse(Lists.named(mine, b))
-        assertTrue(Lists.named(b, Row("s", chat = Row.Chat(status = true))))
-    }
-
-    @Test fun dotsWaitTwoMinutesForAnAnswerAtMost() {
-        val mine = listOf(Row("1", chat = Row.Chat(mine = true)))
-        assertTrue(Lists.waiting(mine, now - 1.minutes, now))
-        assertFalse(Lists.waiting(mine, now - 3.minutes, now))
-        assertTrue(Lists.waiting(listOf(Row("2", chat = Row.Chat(streaming = true))), null, now))
-        assertFalse(Lists.waiting(listOf(Row("2", chat = Row.Chat(streaming = true), children = listOf(Row("w", text = "Hi")))), null, now))
-    }
-
     @Test fun timesInWordsAsTheiPhoneSaysThem() {
         assertEquals("09:05", Times.hm(Instant.parse("2026-10-02T09:05:00Z"), utc)) // as the desktop's rail (renderer/timeline.js timelineTime)
         assertEquals("Today", Times.day("2026-10-02", "Friday 2 October", now, utc))

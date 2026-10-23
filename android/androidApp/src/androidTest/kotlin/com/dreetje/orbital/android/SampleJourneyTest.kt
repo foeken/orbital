@@ -237,15 +237,6 @@ class SampleJourneyTest {
         if (wide) compose.onNodeWithText("My open tasks", useUnmergedTree = true).assertExists()
     }
 
-    @Test fun askTanaOpensTheChat() {
-        launch()
-        val field = compose.onNode(hasContentDescription("Ask Tana") and hasSetTextAction())
-        field.performClick()
-        field.performTextInput("Summarise this week")
-        compose.onNode(hasContentDescription("Ask Tana") and hasSetTextAction().not() and hasClickAction()).performClick()
-        compose.waitUntil(10_000) { seen("Summarise this week’s meetings") }
-    }
-
     @Test fun quickAddWaitsForATitle() {
         launch()
         compose.onNodeWithContentDescription("Quick Add Task").performClick()
