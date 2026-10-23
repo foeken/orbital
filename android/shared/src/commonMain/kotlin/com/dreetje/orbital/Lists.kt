@@ -1,7 +1,6 @@
 package com.dreetje.orbital
 
 import kotlinx.datetime.TimeZone
-import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 // How the screens lay rows out, apart from drawing them: the Timeline's days, a search's sections, an outline
