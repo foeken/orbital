@@ -49,6 +49,12 @@ class ListsTest {
         assertEquals(listOf("1" to 0, "1.1" to 1), flat.map { it.first.id to it.second })
     }
 
+    // a numbered list counts its rows, and starts again after anything else (OutlineRow draws the number)
+    @Test fun aNumberedListCountsAndStartsAgain() {
+        val rows = listOf("numbered", "numbered", "paragraph", "numbered", "bullet").mapIndexed { i, b -> Row("$i", text = "x", block = b) }
+        assertEquals(listOf(1, 2, null, 1, null), Lists.flat(rows).map { it.third })
+    }
+
     @Test fun timesInWordsAsTheiPhoneSaysThem() {
         assertEquals("09:05", Times.hm(Instant.parse("2026-10-02T09:05:00Z"), utc)) // as the desktop's rail (renderer/timeline.js timelineTime)
         assertEquals("Today", Times.day("2026-10-02", "Friday 2 October", now, utc))

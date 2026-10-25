@@ -27,9 +27,15 @@ object Lists {
         return out
     }
 
-    // the outline flattened, each row with how deep it sits: nothing folds on the phone, everything shows
-    fun flat(rows: List<Row>, depth: Int = 0): List<Pair<Row, Int>> =
-        rows.filter { !it.blank }.flatMap { listOf(it to depth) + flat(it.children ?: emptyList(), depth + 1) }
+    // the outline flattened, each row with how deep it sits and, in a numbered list, its number: nothing folds on the
+    // phone, everything shows (Pages.swift NodeScreen.flat). shortcut: a list counts from 1 (sdk/content.js start is not read), as most do
+    fun flat(rows: List<Row>, depth: Int = 0): List<Triple<Row, Int, Int?>> {
+        var n = 0
+        return rows.filter { !it.blank }.flatMap { row ->
+            n = if (row.block == "numbered") n + 1 else 0
+            listOf(Triple(row, depth, n.takeIf { row.block == "numbered" })) + flat(row.children ?: emptyList(), depth + 1)
+        }
+    }
 
     // a day as Tana mentions one (sdk/dates.js): tana:plaindate:YYYY-MM-DD
     fun plainDate(year: Int, month: Int, day: Int) = "tana:plaindate:" + year.toString().padStart(4, '0') + "-" + month.toString().padStart(2, '0') + "-" + day.toString().padStart(2, '0')

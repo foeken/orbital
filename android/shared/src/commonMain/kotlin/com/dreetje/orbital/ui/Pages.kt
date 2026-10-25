@@ -2,6 +2,8 @@ package com.dreetje.orbital.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateListOf
@@ -183,7 +185,7 @@ fun NodeScreen(
                                 }
                             }
                         }
-                        flat.forEach { (row, depth) -> item(key("block:" + row.id)) { OutlineRow(row, depth, engine) } }
+                        flat.forEach { (row, depth, number) -> item(key("block:" + row.id)) { OutlineRow(row, depth, engine, number) } }
                         if (flat.isEmpty()) item("empty") { Text("No notes yet", Modifier.padding(horizontal = 16.dp, vertical = 12.dp), color = c.secondary) }
                     }
                 }
@@ -208,7 +210,7 @@ fun NodeScreen(
                         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp)) {
                             val key = uniqueKeys()
                             access?.let { a -> item("details") { NodeDetails(id, a, engine, open = { assigningVisibility = true }) { load() } } }
-                            flat.forEach { (row, depth) -> item(key("block:" + row.id)) { OutlineRow(row, depth, engine) } }
+                            flat.forEach { (row, depth, number) -> item(key("block:" + row.id)) { OutlineRow(row, depth, engine, number) } }
                         }
                         // a document with fields shows them alone
                         if (flat.isEmpty() && access == null) Empty("Nothing in here yet", glyph = "doc")
@@ -257,7 +259,7 @@ fun ListRow(row: Node, engine: Engine, tight: Boolean = false, reload: suspend (
 // One block of an outline: a bullet and its words, indented by depth; a heading bigger and with no bullet; a reference
 // its node's glyph and name, which opens it; an image its picture, the word Image until it has come (or in the sample)
 @Composable
-fun OutlineRow(row: Node, depth: Int, engine: Engine) {
+fun OutlineRow(row: Node, depth: Int, engine: Engine, number: Int? = null) { // number: its place in a numbered list (Lists.flat)
     val c = Theme.colors
     val zoom = LocalZoom.current
     val density = LocalDensity.current
@@ -273,10 +275,11 @@ fun OutlineRow(row: Node, depth: Int, engine: Engine) {
             .padding(start = 16.dp + 22.dp * depth, end = 16.dp, top = if (row.heading != null) 14.dp else 5.dp, bottom = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        if (row.heading == null) {
+        if (row.heading == null) { // a marker only where Tana draws one: a paragraph has none
             if (ref != null) Glyph(Glyphs.ofUri(ref.uri), onBaseline(3.5.dp, Modifier.size(18.dp)), c.secondary)
+            else if (number != null) Text("$number.", Modifier.widthIn(min = 18.dp).alignByBaseline(), style = style, color = c.secondary, textAlign = TextAlign.End)
             // centred on the lower-case letters
-            else Box(onBaseline((-2.5).dp, Modifier.width(18.dp).height(6.dp)), contentAlignment = Alignment.Center) {
+            else if (row.block == "bullet") Box(onBaseline((-2.5).dp, Modifier.width(18.dp).height(6.dp)), contentAlignment = Alignment.Center) {
                 Box(Modifier.size(6.dp).background(c.tertiary, CircleShape))
             }
         }

@@ -89,7 +89,8 @@
       {
        "text": "Goals"
       }
-     ]
+     ],
+     "block": "heading2"
     },
     {
      "id": "b2",
@@ -114,7 +115,8 @@
         {
          "text": "Each lead brings three"
         }
-       ]
+       ],
+       "block": "bullet"
       },
       {
        "id": "b4",
@@ -128,9 +130,11 @@
           "uri": "tana:user-profile:000000000000000000000000p1"
          }
         }
-       ]
+       ],
+       "block": "bullet"
       }
-     ]
+     ],
+     "block": "bullet"
     },
     {
      "id": "b5",
@@ -138,7 +142,8 @@
       {
        "text": "Leave room for a long walk"
       }
-     ]
+     ],
+     "block": "bullet"
     },
     {
      "id": "b6",
@@ -147,7 +152,8 @@
       {
        "text": "Venues"
       }
-     ]
+     ],
+     "block": "heading2"
     },
     {
      "id": "b7",
@@ -155,7 +161,8 @@
       {
        "text": "@Sam Lee can you check the venue list?"
       }
-     ]
+     ],
+     "block": "bullet"
     },
     {
      "id": "b8",
@@ -164,7 +171,8 @@
      "reference": {
       "uri": "tana:text:0000000000000000000000000b",
       "label": "Send the offsite agenda"
-     }
+     },
+     "block": "bullet"
     }
    ]
   },
@@ -230,7 +238,8 @@
       {
        "text": "Ship the new onboarding in two steps"
       }
-     ]
+     ],
+     "block": "bullet"
     },
     {
      "id": "sum.1",
@@ -239,7 +248,8 @@
       {
        "text": "Mia drafts the copy by Thursday"
       }
-     ]
+     ],
+     "block": "bullet"
     },
     {
      "id": "sum.2",
@@ -257,7 +267,8 @@
       {
        "text": "Ask about the pilot budget"
       }
-     ]
+     ],
+     "block": "bullet"
     }
    ],
    "attendees": [
@@ -294,7 +305,8 @@
       {
        "text": "Talk about the hiring plan"
       }
-     ]
+     ],
+     "block": "bullet"
     }
    ],
    "attendees": [
@@ -317,7 +329,8 @@
       {
        "text": "Day one: strategy, day two: teams"
       }
-     ]
+     ],
+     "block": "bullet"
     }
    ],
    "sensitive": true
@@ -333,7 +346,8 @@
       {
        "text": "Questions to ask before the offsite"
       }
-     ]
+     ],
+     "block": "bullet"
     }
    ]
   },
@@ -348,7 +362,8 @@
       {
        "text": "Rough outline, still moving"
       }
-     ]
+     ],
+     "block": "bullet"
     }
    ]
   },
@@ -363,7 +378,8 @@
       {
        "text": "How we plan, review and ship"
       }
-     ]
+     ],
+     "block": "bullet"
     }
    ]
   },
@@ -378,7 +394,8 @@
       {
        "text": "The office is closed between the holidays"
       }
-     ]
+     ],
+     "block": "bullet"
     }
    ]
   },
@@ -393,7 +410,8 @@
       {
        "text": "Brought over from an older notebook"
       }
-     ]
+     ],
+     "block": "bullet"
     }
    ]
   },
@@ -408,7 +426,8 @@
       {
        "text": "Two rounds, one take-home"
       }
-     ]
+     ],
+     "block": "bullet"
     }
    ]
   },

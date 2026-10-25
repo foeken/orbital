@@ -129,7 +129,7 @@ struct NodeScreen: View {
                 default:
                     List {
                         if let access { NodeDetails(id: id, access: access, engine: engine, reload: load) }
-                        ForEach(Array(Self.flat(page.rows).enumerated()), id: \.offset) { OutlineRow(row: $0.element.row, depth: $0.element.depth, reveal: engine.reveal, engine: engine) }
+                        ForEach(Array(Self.flat(page.rows).enumerated()), id: \.offset) { OutlineRow(row: $0.element.row, depth: $0.element.depth, number: $0.element.number, reveal: engine.reveal, engine: engine) }
                     }
                         .listStyle(.plain)
                         .refreshable { await load() }
@@ -190,9 +190,14 @@ struct NodeScreen: View {
         }
     }
 
-    // the outline flattened, each row with how deep it sits: nothing folds on the phone, everything shows
-    static func flat(_ rows: [Row], depth: Int = 0) -> [(row: Row, depth: Int)] {
-        rows.filter { !$0.blank }.flatMap { [($0, depth)] + flat($0.children ?? [], depth: depth + 1) }
+    // the outline flattened, each row with how deep it sits and, in a numbered list, its number: nothing folds on the
+    // phone, everything shows. shortcut: a list counts from 1 (sdk/content.js start is not read), as most do
+    static func flat(_ rows: [Row], depth: Int = 0) -> [(row: Row, depth: Int, number: Int?)] {
+        var n = 0
+        return rows.filter { !$0.blank }.flatMap { row -> [(row: Row, depth: Int, number: Int?)] in
+            n = row.block == "numbered" ? n + 1 : 0
+            return [(row, depth, row.block == "numbered" ? n : nil)] + flat(row.children ?? [], depth: depth + 1)
+        }
     }
 }
 
@@ -284,7 +289,7 @@ struct MeetingPage: View {
                     .listRowSeparator(.hidden)
             }
             ForEach(Array(NodeScreen.flat(rows).enumerated()), id: \.offset) {
-                OutlineRow(row: $0.element.row, depth: $0.element.depth, reveal: engine.reveal, engine: engine)
+                OutlineRow(row: $0.element.row, depth: $0.element.depth, number: $0.element.number, reveal: engine.reveal, engine: engine)
             }
             if NodeScreen.flat(rows).isEmpty {
                 Text("No notes yet").foregroundStyle(.secondary).listRowSeparator(.hidden)
@@ -321,17 +326,20 @@ extension Row {
 struct OutlineRow: View {
     let row: Row
     let depth: Int
+    var number: Int? // its place in a numbered list (NodeScreen.flat)
     var reveal = false
     var engine: Engine? // to fetch an image row's picture
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: 10) { // a marker only where Tana draws one: a paragraph has none
             if row.heading == nil {
                 if let ref = row.reference {
                     Image("Glyphs/" + Glyph.of(uri: ref.uri)).resizable().frame(width: 18, height: 18).foregroundStyle(.secondary)
                         .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3.5 }
-                } else {
+                } else if let number {
+                    Text("\(number).").monospacedDigit().foregroundStyle(.secondary).frame(minWidth: 18, alignment: .trailing)
+                } else if row.block == "bullet" {
                     Circle().fill(.tertiary).frame(width: 6, height: 6).frame(width: 18)
                         .alignmentGuide(.firstTextBaseline) { $0[.bottom] + 2.5 } // centred on the lower-case letters
                 }
