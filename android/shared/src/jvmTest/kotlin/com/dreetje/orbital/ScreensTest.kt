@@ -229,7 +229,7 @@ class ScreensTest {
         waitUntil(timeoutMillis = 3000) { onAllWithText("Tomorrow").isNotEmpty() }
         onNodeWithText("Pick a Date …").assertExists()
         assertTrue(onAllWithText("Remove All Pins").isEmpty(), "nothing to remove yet")
-        onNodeWithText("Today").performClick()
+        onNode(hasText("Today") and androidx.compose.ui.test.hasClickAction()).performClick() // the menu's, not the Timeline's heading under the viewer
         waitUntil(timeoutMillis = 3000) { onAllWithText("Pinned to today").isNotEmpty() }
         assertTrue(task in engine.pinned)
         onNode(hasContentDescription("Pin")).performClick()
