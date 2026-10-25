@@ -132,6 +132,7 @@ struct NodeScreen: View {
                         ForEach(Array(Self.flat(page.rows).enumerated()), id: \.offset) { OutlineRow(row: $0.element.row, depth: $0.element.depth, number: $0.element.number, reveal: engine.reveal, engine: engine) }
                     }
                         .listStyle(.plain)
+                        .environment(\.defaultMinListRowHeight, 0) // blocks as close as a document's, not the system's 44
                         .refreshable { await load() }
                         .overlay { if Self.flat(page.rows).isEmpty, access == nil { ContentUnavailableView("Nothing in here yet", image: "Glyphs/doc") } } // a document with fields shows them alone
                 }
@@ -296,6 +297,7 @@ struct MeetingPage: View {
             }
         }
         .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 0)
     }
 }
 
@@ -355,6 +357,7 @@ struct OutlineRow: View {
         }
         .padding(.leading, CGFloat(depth) * 22)
         .padding(.top, row.heading != nil ? 10 : 0)
+        .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 16)) // 8 pt between blocks, as Tana spaces them
         .listRowSeparator(.hidden)
         .contentShape(Rectangle())
         .onTapGesture { openURL.zoom(row.reference?.uri) }

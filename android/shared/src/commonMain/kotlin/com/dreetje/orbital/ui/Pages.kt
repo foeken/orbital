@@ -272,7 +272,7 @@ fun OutlineRow(row: Node, depth: Int, engine: Engine, number: Int? = null) { // 
     Row(
         Modifier.fillMaxWidth()
             .then(if (ref != null) Modifier.clickable { zoom(ref.uri) }.semantics { role = Role.Button } else Modifier)
-            .padding(start = 16.dp + 22.dp * depth, end = 16.dp, top = if (row.heading != null) 14.dp else 5.dp, bottom = 5.dp),
+            .padding(start = 16.dp + 22.dp * depth, end = 16.dp, top = if (row.heading != null) 14.dp else 4.dp, bottom = 4.dp), // 8 dp between blocks, as Tana spaces them
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (row.heading == null) { // a marker only where Tana draws one: a paragraph has none
