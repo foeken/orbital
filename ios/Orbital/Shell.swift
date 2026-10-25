@@ -15,6 +15,7 @@ struct Shell: View {
 
     @State private var page = Page.timeline
     @State private var path: [String] = [] // the nodes zoomed into from the page, as a push each
+    @State private var viewing: Viewed? // a node opened by an orbital: link, in the viewer over wherever you are (Viewer)
     @State private var searches: [Page] = []
     @State private var icons: [String: UIImage] = [:] // saved search id -> the icon it was given in Orbital
     @State private var secret: Set<String> = [] // the saved searches marked sensitive, drawn so in the menu too
@@ -147,10 +148,8 @@ struct Shell: View {
             // a widget's box ticked where the app could not take it at once (TickTaskIntent): with the Timeline in front
             for t in Writes.take() { page = .timeline; path = []; Task { await engine.tick(t.id, to: t.to) } }
         }
-        .sheet(item: Binding { engine.assigning } set: { engine.assigning = $0 }) { AssignSheet(engine: engine, task: $0) }
-        .sheet(item: Binding { engine.pickingDay } set: { engine.pickingDay = $0 }) { PinDaySheet(engine: engine, picking: $0) } // a pin menu's Pick a Date …
-        .sheet(item: Binding { engine.handing } set: { engine.handing = $0 }) { HandSheet(engine: engine, handing: $0) } // Assign to your Dot (Agents.swift)
-        .shareAsk(engine)
+        .sheet(item: $viewing) { Viewer(engine: engine, id: $0.id) }
+        .modifier(EngineSheets(engine: engine, on: viewing == nil)) // the viewer asks for them itself while it is up
         .task {
             // -zoom <id>: a node open at launch, for design shots
             let args = CommandLine.arguments
@@ -200,16 +199,16 @@ struct Shell: View {
     // The Share extension opens Orbital with orbital-share://; what it shared waits until Orbital is in front, should iOS
     // not open it. An orbital: link only opens, whoever sends it (a widget's tap, another app, a web page), since iOS
     // does not say who did, and Orbital's own writes go through intents (TickTaskIntent, Intents.swift): orbital:add
-    // Quick Add, orbital:timeline the Timeline, orbital:<id> that node over it; orbital:check:, uncheck:, pin: and
+    // Quick Add, orbital:timeline the Timeline, orbital:<id> that node in the viewer over wherever you are; orbital:check:, uncheck:, pin: and
     // unpin:<id> that node too, where you tick or pin it yourself, and orbital:new?title=… Quick Add with its title,
     // added only when you press Add (Android's Link.parse with own false, docs/ANDROID.md Security).
     private func open(_ url: URL) {
         guard url.scheme == "orbital" else { shared = Shared.take() ?? shared; return }
         let what = String(url.absoluteString.dropFirst("orbital:".count))
-        settings = false; adding = what == "add"; show(false)
+        settings = false; adding = what == "add"; viewing = nil; show(false)
         if what == "timeline" { page = .timeline; path = [] }
         if let id = ["", "check:", "uncheck:", "pin:", "unpin:"].lazy.compactMap({ what.hasPrefix($0) ? String(what.dropFirst($0.count)) : nil })
-            .first(where: { $0.wholeMatch(of: /tana:[a-z-]+:[0-9a-z]{26}/) != nil }) { page = .timeline; path = [id] }
+            .first(where: { $0.wholeMatch(of: /tana:[a-z-]+:[0-9a-z]{26}/) != nil }) { viewing = Viewed(id: id) }
         if what.hasPrefix("new?"), let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
            let title = items.first(where: { $0.name == "title" })?.value?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
             shared = Shared(text: title)

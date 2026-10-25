@@ -130,6 +130,7 @@ fun Shell(engine: Engine, start: Start = Start()) {
     var secret by remember { mutableStateOf(setOf<String>()) } // the saved searches marked sensitive
     var settings by rememberSaveable { mutableStateOf(start.settings) }
     var adding by rememberSaveable { mutableStateOf(start.add) }
+    var viewing by rememberSaveable { mutableStateOf<String?>(null) } // a node opened by an orbital: link, in the viewer over wherever you are (Viewer)
     val focus = LocalFocusManager.current
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
@@ -184,9 +185,9 @@ fun Shell(engine: Engine, start: Start = Start()) {
         val opened = engine.link ?: return@LaunchedEffect
         engine.link = null
         val asked = Link.parse(opened.link, opened.own)
-        settings = false; adding = asked == Link.Add; show(false)
+        settings = false; adding = asked == Link.Add; viewing = null; show(false)
         when (asked) {
-            is Link.Open -> { page = Menu.Timeline; path.clear(); push(asked.id) }
+            is Link.Open -> viewing = asked.id
             Link.Timeline -> { page = Menu.Timeline; path.clear() }
             is Link.Tick -> { page = Menu.Timeline; path.clear(); engine.scope.launch { engine.tick(asked.id, asked.to) } }
             is Link.Pin -> engine.scope.launch { engine.pin(asked.id, asked.on) }
@@ -311,6 +312,7 @@ fun Shell(engine: Engine, start: Start = Start()) {
 
     if (settings) SettingsSheet(engine, start.connect) { settings = false }
     if (adding) QuickAdd(engine, search = if (path.isEmpty()) (page as? Menu.Search)?.id else null) { adding = false } // on a saved search: a row of it
+    viewing?.let { Viewer(engine, it) { viewing = null } }
     engine.shared?.let { s -> QuickAdd(engine, shared = s) { engine.shared = null } }
     engine.assigning?.let { a -> AssignSheet(engine, a) { engine.assigning = null } }
     engine.pickingDay?.let { p -> PinDayDialog(engine, p) { engine.pickingDay = null } } // a pin menu's Pick a Date …

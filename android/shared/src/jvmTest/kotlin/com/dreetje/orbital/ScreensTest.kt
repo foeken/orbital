@@ -204,6 +204,21 @@ class ScreensTest {
         kotlin.test.assertEquals("closed", engine.states[task])
     }
 
+    // An orbital: link from outside (Echo's, another app's) opens its node in the viewer over wherever you were (Viewer):
+    // Back closes it and leaves your place, here a saved search, where the link used to put you back on the Timeline
+    @Test fun anOutsideLinkOpensOverYourPlaceAndBackLeavesIt() = sample { engine ->
+        onNodeWithContentDescription("Menu").performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("My open tasks").isNotEmpty() }
+        onNodeWithText("My open tasks", useUnmergedTree = true).performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Book the offsite venue").isNotEmpty() }
+        engine.link = Engine.Opened("orbital:tana:text:000000000000000000000000v6", own = false)
+        waitUntil(timeoutMillis = 5000) { onAllWithText("Interview loop").isNotEmpty() }
+        onNodeWithContentDescription("Back").performClick()
+        waitUntil(timeoutMillis = 3000) { onAllWithText("Interview loop").isEmpty() }
+        onNodeWithText("Book the offsite venue", useUnmergedTree = true).assertExists()
+        assertTrue(onAllWithText("Today's Tasks").isEmpty(), "still the saved search, not the Timeline")
+    }
+
     // a zoomed node's pin menu at the top right, where an outside orbital:pin: link now lands (PinButton): Today ticked on,
     // said under the title, then Remove All Pins takes every day off
     @Test fun aZoomedNodesPinMenuPinsTodayAndRemovesAll() = sample { engine ->

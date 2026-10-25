@@ -2,6 +2,9 @@ package com.dreetje.orbital.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -80,6 +83,21 @@ import kotlinx.coroutines.launch
 
 // The iPhone's ios/Orbital/Pages.swift: a node zoomed into (an outline, a saved search, a meeting) and who
 // has it and who sees it
+
+// A node opened from outside the app (Pages.swift Viewer): an orbital: link, Echo's, another app's or a widget's, opens
+// in a sheet over wherever you were, with a stack of its own, so a mention in it opens in the sheet and Back or a swipe
+// down leaves your place as it was. The page is NodeScreen, live as anywhere else.
+@Composable
+fun Viewer(engine: Engine, id: String, onClose: () -> Unit) {
+    val stack = remember(id) { mutableStateListOf(id) }
+    Sheet(onClose) { close ->
+        val back: () -> Unit = { if (stack.size > 1) stack.removeAt(stack.lastIndex) else close() }
+        PlatformBack(stack.size > 1, onBack = back)
+        CompositionLocalProvider(LocalZoom provides { to -> if (to != null) stack.add(to) }) {
+            NodeScreen(engine, stack.last(), Modifier.background(Theme.colors.page).navigationBarsPadding(), onBack = back)
+        }
+    }
+}
 
 // Zoomed into a node: a saved search as its results, a meeting as its attendees and your
 // notes, its summary once Tana wrote it up (Notes | Summary over it when you have notes too), anything else as its

@@ -43,6 +43,44 @@ struct ListRow: View {
     }
 }
 
+// A node opened from outside the app (an orbital: link: Echo's, another app's, a widget's, Siri's Open): a sheet over
+// wherever you were, with a stack of its own, so a mention in it opens in the sheet and closing it leaves your place as
+// it was. The page is NodeScreen, live as anywhere else. Android's Viewer (Pages.kt) the same.
+struct Viewed: Identifiable { let id: String }
+struct Viewer: View {
+    let engine: Engine
+    let id: String
+    @State private var path: [String] = []
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        NavigationStack(path: $path) {
+            NodeScreen(engine: engine, id: id)
+                .toolbar { ToolbarItem(placement: .topBarLeading) { Button { dismiss() } label: { Image(systemName: "xmark") }.accessibilityLabel("Close") } }
+                .navigationDestination(for: String.self) { NodeScreen(engine: engine, id: $0) }
+        }
+        .environment(\.openURL, OpenURLAction { url in
+            guard url.scheme == "orbital" else { return .systemAction }
+            path.append(String(url.absoluteString.dropFirst("orbital:".count)))
+            return .handled
+        })
+        .modifier(EngineSheets(engine: engine))
+    }
+}
+
+// What the engine asks to show (Assign to …, a pin menu's Pick a Date …, Assign to your Dot, Grant access), from the view
+// on top: the shell, or the viewer over it, since a view that is presenting a sheet presents nothing else
+struct EngineSheets: ViewModifier {
+    let engine: Engine
+    var on = true
+    func body(content: Content) -> some View {
+        content
+            .sheet(item: Binding { on ? engine.assigning : nil } set: { engine.assigning = $0 }) { AssignSheet(engine: engine, task: $0) }
+            .sheet(item: Binding { on ? engine.pickingDay : nil } set: { engine.pickingDay = $0 }) { PinDaySheet(engine: engine, picking: $0) }
+            .sheet(item: Binding { on ? engine.handing : nil } set: { engine.handing = $0 }) { HandSheet(engine: engine, handing: $0) } // Agents.swift
+            .shareAsk(engine, on: on)
+    }
+}
+
 // Zoomed into a node: a saved search as its results, a meeting as its attendees and your notes or its summary, anything
 // else as its outline; a chat stays on the Mac. Read-only; a mention, a reference or a row opens the node it names.
 struct NodeScreen: View {
@@ -505,8 +543,8 @@ struct PeoplePicker: View {
 
 extension View {
     // Assigned someone who cannot open it (Engine.assign): Grant access shares it with them, Keep private leaves it as it is
-    func shareAsk(_ engine: Engine) -> some View {
-        alert((engine.asking?.shut.names ?? "") + " can’t see this", isPresented: Binding { engine.asking != nil } set: { if !$0 { engine.asking = nil } }, presenting: engine.asking) { ask in
+    func shareAsk(_ engine: Engine, on: Bool = true) -> some View {
+        alert((engine.asking?.shut.names ?? "") + " can’t see this", isPresented: Binding { on && engine.asking != nil } set: { if !$0 { engine.asking = nil } }, presenting: engine.asking) { ask in
             if ask.access.grants {
                 Button("Grant access") { Task { await engine.share(ask.id, "people", ask.access.participants + ask.shut.map(\.id)); await ask.then() } }
             }

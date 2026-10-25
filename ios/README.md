@@ -84,7 +84,7 @@ The Android app has no counterpart yet: Gemini's AppFunctions are an alpha (#723
 ## Links from other apps
 
 iOS does not say who opened a link, so an `orbital:` link writes nothing, whoever sends it: Orbital's own widgets and Siri
-write through intents instead. `orbital:<id>`, `orbital:timeline` and `orbital:add` open as ever; `orbital:check:`,
+write through intents instead. `orbital:<id>` opens that node in the viewer, a sheet over wherever you are (`Pages.swift` `Viewer`), and `orbital:timeline` and `orbital:add` open as ever; `orbital:check:`,
 `uncheck:`, `pin:` and `unpin:<id>` open that node, where you tick it or pin it yourself (Pin to Today is on its page),
 and `orbital:new?title=…` opens Quick Add with the title filled in, added only when you press Add (`Shell.swift` open), as
 Android holds the same links (docs/ANDROID.md, Security). `SampleTests` holds both.
