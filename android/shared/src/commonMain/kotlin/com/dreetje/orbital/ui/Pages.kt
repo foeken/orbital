@@ -2,6 +2,7 @@ package com.dreetje.orbital.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -265,7 +266,8 @@ fun OutlineRow(row: Node, depth: Int, engine: Engine, number: Int? = null) { // 
     val density = LocalDensity.current
     val ref = row.reference
     val reveal = engine.reveal
-    val style = when (row.heading) { null -> Type.body; 1 -> Type.title2; 2 -> Type.title3; else -> Type.headline }
+    // a third heading and below smaller than the words under it, bold, as Tana draws it (Pages.swift OutlineRow)
+    val style = when (row.heading) { null -> Type.body; 1 -> Type.title2; 2 -> Type.title3; else -> Type.subheadline.copy(fontWeight = FontWeight.Bold) }
     val uri = row.image?.uri
     var picture by remember(uri) { mutableStateOf<ImageBitmap?>(null) }
     if (uri != null) LaunchedEffect(uri) { picture = engine.image(uri) }

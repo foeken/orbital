@@ -351,7 +351,8 @@ struct OutlineRow: View {
                 else if row.type == "image" || row.type == "table" { Text(row.type == "image" ? "Image" : "Table").foregroundStyle(.secondary) }
                 else { Text(row.styled) }
             }
-            .font(row.heading == 1 ? .title2.bold() : row.heading == 2 ? .title3.bold() : row.heading != nil ? .headline : .body)
+            // a third heading and below smaller than the words under it, bold, as Tana draws it: a bold line stays body size
+            .font(row.heading == 1 ? .title2.bold() : row.heading == 2 ? .title3.bold() : row.heading != nil ? .subheadline.bold() : .body)
             .frame(maxWidth: .infinity, alignment: .leading)
             .modifier(Blur(hidden: row.sensitive == true && !reveal))
         }
