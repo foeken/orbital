@@ -171,7 +171,8 @@ const HOW = 'You are handed a Tana node by the person you work for, through Orbi
   + 'your Tana tools, above the status line, which stays the node\'s last line. When you finish, change it to "Agent status: Completed" when your part is '
   + 'done and it is their turn (a draft ready for their review is Completed), or to "Agent status: Failed" if you cannot do it. Never stop with it on '
   + 'Assigned or Working: Orbital shows that line. Leave the rest of the node as it is (a task stays open: checking it off is the owner\'s) unless the '
-  + 'request asks you to change it.';
+  + 'request asks you to change it. When you tell the person about a Tana node outside Tana, link it as orbital: and its id (orbital:tana:text:…): '
+  + 'that opens it in Orbital on their Mac or phone; inside Tana, mention it as Tana does.';
 const REQUEST_MAX = 4000; // characters: the event as a whole stays within what orbital.md takes (16 KB)
 // The request as it will be sent, or why it cannot be: checked before anything is written into the node
 function request(a, prompt) {

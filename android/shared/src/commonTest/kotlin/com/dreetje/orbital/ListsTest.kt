@@ -49,6 +49,23 @@ class ListsTest {
         assertEquals(listOf("1" to 0, "1.1" to 1), flat.map { it.first.id to it.second })
     }
 
+    // a numbered list counts its rows, and starts again after anything else (OutlineRow draws the number)
+    @Test fun aNumberedListCountsAndStartsAgain() {
+        val rows = listOf("numbered", "numbered", "paragraph", "numbered", "bullet").mapIndexed { i, b -> Row("$i", text = "x", block = b) }
+        assertEquals(listOf(1, 2, null, 1, null), Lists.flat(rows).map { it.third })
+    }
+
+    // a document's rhythm (Lists.gap): a section heading, or a line wholly in bold, has room above and little below;
+    // paragraphs 12 apart, list items 6, a list 9 from the words around it
+    @Test fun blocksAreSpacedAsADocument() {
+        val bold = listOf(Row.Segment("1. Power", Row.Marks(bold = true)))
+        val rows = listOf(Row("h", text = "Ideas", heading = 3, block = "heading3"), Row("b", segments = bold, block = "paragraph"),
+            Row("p", text = "Nguyen", block = "paragraph"), Row("q", text = "Short", block = "paragraph"), Row("b2", segments = bold, block = "paragraph"),
+            Row("p2", text = "Nguyen calls", block = "paragraph"), Row("l1", text = "People", block = "bullet"), Row("l2", text = "An", block = "bullet"),
+            Row("p3", text = "The three", block = "paragraph"))
+        assertEquals(listOf(8, 12, 6, 12, 22, 6, 9, 6, 9), rows.mapIndexed { i, r -> Lists.gap(r, rows.getOrNull(i - 1)) })
+    }
+
     @Test fun timesInWordsAsTheiPhoneSaysThem() {
         assertEquals("09:05", Times.hm(Instant.parse("2026-10-02T09:05:00Z"), utc)) // as the desktop's rail (renderer/timeline.js timelineTime)
         assertEquals("Today", Times.day("2026-10-02", "Friday 2 October", now, utc))

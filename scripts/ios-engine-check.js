@@ -166,6 +166,22 @@ assert.throws(() => standIns.createHash('sha1'), /not on the phone/);
   assert.strictEqual(rows[0].title, 'Salary review', 'the words stay: the phone blurs them');
 }
 
+// What a tap opens on the phone (ios/engine/links.js): a Tana page's address or a bare id as the node, so the node page
+// opens it; a date mention and a tana: link to no document plain words; any other link and a node mention as they were
+{
+  const { openable } = require('../ios/engine/links.js');
+  const N = 'tana:text:01k8x2m4q7r9t3v5w6y8z0a1b2';
+  const web = 'https://home.tana.inc/o/01ks7abcdefghjkmnpqrstvwxy/l/' + encodeURIComponent(N);
+  assert.deepStrictEqual(openable({ text: 'The Score', marks: { bold: true, link: web } }), { text: 'The Score', marks: { bold: true, link: N } }, 'an address as the node, its other marks kept');
+  assert.deepStrictEqual(openable({ text: 'x', marks: { link: N } }).marks.link, N, 'a bare id as it is');
+  assert.deepStrictEqual(openable({ text: 'x', marks: { link: 'orbital:' + N } }).marks.link, N, 'an orbital: link, as Echo writes it, as the node');
+  assert.deepStrictEqual(openable({ text: 'site', marks: { link: 'https://example.com' } }).marks.link, 'https://example.com', 'another site left for the browser');
+  assert.deepStrictEqual(openable({ text: 'day', marks: { link: 'tana:plaindate:2026-10-25' } }), { text: 'day', marks: {} }, 'a tana: link to no document: no link');
+  assert.deepStrictEqual(openable({ mention: { uri: 'tana:plaindate:2026-10-25', label: '25 Oct' } }), { text: '25 Oct' }, 'a date: its words');
+  assert.ok(openable({ mention: { uri: 'tana:plaindate:2026-10-25' } }).text.length > 0, 'a date with no label: the day in words');
+  assert.deepStrictEqual(openable({ mention: { uri: N, label: 'The Score' } }), { mention: { uri: N, label: 'The Score' } }, 'a node mention as it is');
+}
+
 // The words for a Timeline row's times (ios/engine/labels.js) are the desktop's own: renderer/timeline.js timelineTime,
 // dayKey and timelineDay, sliced out of its source and run beside them. An entry gets its time, its day and that day in
 // words; the blocks above the days keep main/timeline.js's 'Now' and ''; a meeting to come with no end is timed by its start.

@@ -27,9 +27,38 @@ object Lists {
         return out
     }
 
-    // the outline flattened, each row with how deep it sits: nothing folds on the phone, everything shows
-    fun flat(rows: List<Row>, depth: Int = 0): List<Pair<Row, Int>> =
-        rows.filter { !it.blank }.flatMap { listOf(it to depth) + flat(it.children ?: emptyList(), depth + 1) }
+    // the outline flattened, each row with how deep it sits and, in a numbered list, its number: nothing folds on the
+    // phone, everything shows (Pages.swift NodeScreen.flat). shortcut: a list counts from 1 (sdk/content.js start is not read), as most do
+    fun flat(rows: List<Row>, depth: Int = 0): List<Triple<Row, Int, Int?>> {
+        var n = 0
+        return rows.filter { !it.blank }.flatMap { row ->
+            n = if (row.block == "numbered") n + 1 else 0
+            listOf(Triple(row, depth, n.takeIf { row.block == "numbered" })) + flat(row.children ?: emptyList(), depth + 1)
+        }
+    }
+
+    // The space above a block in dp, as a reading document spaces them (Pages.swift NodeScreen.gap): a heading, or a line
+    // wholly in bold, opens a section and sits close to what it heads; list items sit closer than paragraphs
+    fun gap(row: Row, prev: Row?): Int {
+        if (prev == null) return 8
+        val k = kind(row)
+        val p = kind(prev)
+        return when {
+            k == "heading" -> if (p == "heading") 12 else 22
+            p == "heading" -> 6
+            k == "list" && p == "list" -> 6
+            k == "list" || p == "list" -> 9
+            else -> 12
+        }
+    }
+    private fun kind(r: Row): String {
+        val words = r.segments.orEmpty().filter { !it.text.isNullOrBlank() }
+        return when {
+            r.heading != null || (words.isNotEmpty() && words.all { it.marks?.bold == true }) -> "heading"
+            r.block == "bullet" || r.block == "numbered" -> "list"
+            else -> "paragraph"
+        }
+    }
 
     // a day as Tana mentions one (sdk/dates.js): tana:plaindate:YYYY-MM-DD
     fun plainDate(year: Int, month: Int, day: Int) = "tana:plaindate:" + year.toString().padStart(4, '0') + "-" + month.toString().padStart(2, '0') + "-" + day.toString().padStart(2, '0')

@@ -43,6 +43,44 @@ struct ListRow: View {
     }
 }
 
+// A node opened from outside the app (an orbital: link: Echo's, another app's, a widget's, Siri's Open): a sheet over
+// wherever you were, with a stack of its own, so a mention in it opens in the sheet and closing it leaves your place as
+// it was. The page is NodeScreen, live as anywhere else. Android's Viewer (Pages.kt) the same.
+struct Viewed: Identifiable { let id: String }
+struct Viewer: View {
+    let engine: Engine
+    let id: String
+    @State private var path: [String] = []
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        NavigationStack(path: $path) {
+            NodeScreen(engine: engine, id: id)
+                .toolbar { ToolbarItem(placement: .topBarLeading) { Button { dismiss() } label: { Image(systemName: "xmark") }.accessibilityLabel("Close") } }
+                .navigationDestination(for: String.self) { NodeScreen(engine: engine, id: $0) }
+        }
+        .environment(\.openURL, OpenURLAction { url in
+            guard url.scheme == "orbital" else { return .systemAction }
+            path.append(String(url.absoluteString.dropFirst("orbital:".count)))
+            return .handled
+        })
+        .modifier(EngineSheets(engine: engine))
+    }
+}
+
+// What the engine asks to show (Assign to …, a pin menu's Pick a Date …, Assign to your Dot, Grant access), from the view
+// on top: the shell, or the viewer over it, since a view that is presenting a sheet presents nothing else
+struct EngineSheets: ViewModifier {
+    let engine: Engine
+    var on = true
+    func body(content: Content) -> some View {
+        content
+            .sheet(item: Binding { on ? engine.assigning : nil } set: { engine.assigning = $0 }) { AssignSheet(engine: engine, task: $0) }
+            .sheet(item: Binding { on ? engine.pickingDay : nil } set: { engine.pickingDay = $0 }) { PinDaySheet(engine: engine, picking: $0) }
+            .sheet(item: Binding { on ? engine.handing : nil } set: { engine.handing = $0 }) { HandSheet(engine: engine, handing: $0) } // Agents.swift
+            .shareAsk(engine, on: on)
+    }
+}
+
 // Zoomed into a node: a saved search as its results, a meeting as its attendees and your notes or its summary, anything
 // else as its outline; a chat stays on the Mac. Read-only; a mention, a reference or a row opens the node it names.
 struct NodeScreen: View {
@@ -91,9 +129,13 @@ struct NodeScreen: View {
                 default:
                     List {
                         if let access { NodeDetails(id: id, access: access, engine: engine, reload: load) }
-                        ForEach(Array(Self.flat(page.rows).enumerated()), id: \.offset) { OutlineRow(row: $0.element.row, depth: $0.element.depth, reveal: engine.reveal, engine: engine) }
+                        let flat = Self.flat(page.rows)
+                        ForEach(Array(flat.enumerated()), id: \.offset) { i, e in
+                            OutlineRow(row: e.row, depth: e.depth, number: e.number, above: Self.gap(e.row, after: i > 0 ? flat[i - 1].row : nil), reveal: engine.reveal, engine: engine)
+                        }
                     }
                         .listStyle(.plain)
+                        .environment(\.defaultMinListRowHeight, 0) // blocks as close as a document's, not the system's 44
                         .refreshable { await load() }
                         .overlay { if Self.flat(page.rows).isEmpty, access == nil { ContentUnavailableView("Nothing in here yet", image: "Glyphs/doc") } } // a document with fields shows them alone
                 }
@@ -152,9 +194,31 @@ struct NodeScreen: View {
         }
     }
 
-    // the outline flattened, each row with how deep it sits: nothing folds on the phone, everything shows
-    static func flat(_ rows: [Row], depth: Int = 0) -> [(row: Row, depth: Int)] {
-        rows.filter { !$0.blank }.flatMap { [($0, depth)] + flat($0.children ?? [], depth: depth + 1) }
+    // the outline flattened, each row with how deep it sits and, in a numbered list, its number: nothing folds on the
+    // phone, everything shows. shortcut: a list counts from 1 (sdk/content.js start is not read), as most do
+    static func flat(_ rows: [Row], depth: Int = 0) -> [(row: Row, depth: Int, number: Int?)] {
+        var n = 0
+        return rows.filter { !$0.blank }.flatMap { row -> [(row: Row, depth: Int, number: Int?)] in
+            n = row.block == "numbered" ? n + 1 : 0
+            return [(row, depth, row.block == "numbered" ? n : nil)] + flat(row.children ?? [], depth: depth + 1)
+        }
+    }
+
+    // The space above a block, as a reading document spaces them (a mockup of this page, 2026-10-25): a heading, or a
+    // line wholly in bold, opens a section and sits close to what it heads; list items sit closer than paragraphs.
+    // Android's Lists.gap the same.
+    static func gap(_ row: Row, after prev: Row?) -> CGFloat {
+        guard let prev else { return 8 }
+        let k = kind(row), p = kind(prev)
+        if k == "heading" { return p == "heading" ? 12 : 22 }
+        if p == "heading" { return 6 }
+        if k == "list" && p == "list" { return 6 }
+        return k == "list" || p == "list" ? 9 : 12
+    }
+    private static func kind(_ r: Row) -> String {
+        let words = (r.segments ?? []).filter { !($0.text ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
+        if r.heading != nil || (!words.isEmpty && words.allSatisfy { $0.marks?.bold == true }) { return "heading" }
+        return r.block == "bullet" || r.block == "numbered" ? "list" : "paragraph"
     }
 }
 
@@ -245,14 +309,16 @@ struct MeetingPage: View {
                     .pickerStyle(.segmented)
                     .listRowSeparator(.hidden)
             }
-            ForEach(Array(NodeScreen.flat(rows).enumerated()), id: \.offset) {
-                OutlineRow(row: $0.element.row, depth: $0.element.depth, reveal: engine.reveal, engine: engine)
+            let flat = NodeScreen.flat(rows)
+            ForEach(Array(flat.enumerated()), id: \.offset) { i, e in
+                OutlineRow(row: e.row, depth: e.depth, number: e.number, above: NodeScreen.gap(e.row, after: i > 0 ? flat[i - 1].row : nil), reveal: engine.reveal, engine: engine)
             }
             if NodeScreen.flat(rows).isEmpty {
                 Text("No notes yet").foregroundStyle(.secondary).listRowSeparator(.hidden)
             }
         }
         .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 0)
     }
 }
 
@@ -283,17 +349,21 @@ extension Row {
 struct OutlineRow: View {
     let row: Row
     let depth: Int
+    var number: Int? // its place in a numbered list (NodeScreen.flat)
+    var above: CGFloat = 8 // the space over it (NodeScreen.gap)
     var reveal = false
     var engine: Engine? // to fetch an image row's picture
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: 10) { // a marker only where Tana draws one: a paragraph has none
             if row.heading == nil {
                 if let ref = row.reference {
                     Image("Glyphs/" + Glyph.of(uri: ref.uri)).resizable().frame(width: 18, height: 18).foregroundStyle(.secondary)
                         .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3.5 }
-                } else {
+                } else if let number {
+                    Text("\(number).").monospacedDigit().foregroundStyle(.secondary).frame(minWidth: 18, alignment: .trailing)
+                } else if row.block == "bullet" {
                     Circle().fill(.tertiary).frame(width: 6, height: 6).frame(width: 18)
                         .alignmentGuide(.firstTextBaseline) { $0[.bottom] + 2.5 } // centred on the lower-case letters
                 }
@@ -303,12 +373,14 @@ struct OutlineRow: View {
                 else if row.type == "image" || row.type == "table" { Text(row.type == "image" ? "Image" : "Table").foregroundStyle(.secondary) }
                 else { Text(row.styled) }
             }
-            .font(row.heading == 1 ? .title2.bold() : row.heading == 2 ? .title3.bold() : row.heading != nil ? .headline : .body)
+            // a third heading and below smaller than the words under it, bold, as Tana draws it: a bold line stays body size
+            .font(row.heading == 1 ? .title2.bold() : row.heading == 2 ? .title3.bold() : row.heading != nil ? .subheadline.bold() : .body)
             .frame(maxWidth: .infinity, alignment: .leading)
             .modifier(Blur(hidden: row.sensitive == true && !reveal))
         }
         .padding(.leading, CGFloat(depth) * 22)
-        .padding(.top, row.heading != nil ? 10 : 0)
+        .padding(.top, above)
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 16))
         .listRowSeparator(.hidden)
         .contentShape(Rectangle())
         .onTapGesture { openURL.zoom(row.reference?.uri) }
@@ -505,8 +577,8 @@ struct PeoplePicker: View {
 
 extension View {
     // Assigned someone who cannot open it (Engine.assign): Grant access shares it with them, Keep private leaves it as it is
-    func shareAsk(_ engine: Engine) -> some View {
-        alert((engine.asking?.shut.names ?? "") + " can’t see this", isPresented: Binding { engine.asking != nil } set: { if !$0 { engine.asking = nil } }, presenting: engine.asking) { ask in
+    func shareAsk(_ engine: Engine, on: Bool = true) -> some View {
+        alert((engine.asking?.shut.names ?? "") + " can’t see this", isPresented: Binding { on && engine.asking != nil } set: { if !$0 { engine.asking = nil } }, presenting: engine.asking) { ask in
             if ask.access.grants {
                 Button("Grant access") { Task { await engine.share(ask.id, "people", ask.access.participants + ask.shut.map(\.id)); await ask.then() } }
             }
