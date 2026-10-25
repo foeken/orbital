@@ -186,7 +186,7 @@ fun NodeScreen(
                                 }
                             }
                         }
-                        flat.forEach { (row, depth, number) -> item(key("block:" + row.id)) { OutlineRow(row, depth, engine, number) } }
+                        flat.forEachIndexed { i, (row, depth, number) -> item(key("block:" + row.id)) { OutlineRow(row, depth, engine, number, Lists.gap(row, flat.getOrNull(i - 1)?.first)) } }
                         if (flat.isEmpty()) item("empty") { Text("No notes yet", Modifier.padding(horizontal = 16.dp, vertical = 12.dp), color = c.secondary) }
                     }
                 }
@@ -211,7 +211,7 @@ fun NodeScreen(
                         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp)) {
                             val key = uniqueKeys()
                             access?.let { a -> item("details") { NodeDetails(id, a, engine, open = { assigningVisibility = true }) { load() } } }
-                            flat.forEach { (row, depth, number) -> item(key("block:" + row.id)) { OutlineRow(row, depth, engine, number) } }
+                            flat.forEachIndexed { i, (row, depth, number) -> item(key("block:" + row.id)) { OutlineRow(row, depth, engine, number, Lists.gap(row, flat.getOrNull(i - 1)?.first)) } }
                         }
                         // a document with fields shows them alone
                         if (flat.isEmpty() && access == null) Empty("Nothing in here yet", glyph = "doc")
@@ -260,7 +260,7 @@ fun ListRow(row: Node, engine: Engine, tight: Boolean = false, reload: suspend (
 // One block of an outline: a bullet and its words, indented by depth; a heading bigger and with no bullet; a reference
 // its node's glyph and name, which opens it; an image its picture, the word Image until it has come (or in the sample)
 @Composable
-fun OutlineRow(row: Node, depth: Int, engine: Engine, number: Int? = null) { // number: its place in a numbered list (Lists.flat)
+fun OutlineRow(row: Node, depth: Int, engine: Engine, number: Int? = null, above: Int = 8) { // number: its place in a numbered list (Lists.flat); above: the space over it (Lists.gap)
     val c = Theme.colors
     val zoom = LocalZoom.current
     val density = LocalDensity.current
@@ -274,7 +274,7 @@ fun OutlineRow(row: Node, depth: Int, engine: Engine, number: Int? = null) { // 
     Row(
         Modifier.fillMaxWidth()
             .then(if (ref != null) Modifier.clickable { zoom(ref.uri) }.semantics { role = Role.Button } else Modifier)
-            .padding(start = 16.dp + 22.dp * depth, end = 16.dp, top = if (row.heading != null) 14.dp else 4.dp, bottom = 4.dp), // 8 dp between blocks, as Tana spaces them
+            .padding(start = 16.dp + 22.dp * depth, end = 16.dp, top = above.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (row.heading == null) { // a marker only where Tana draws one: a paragraph has none

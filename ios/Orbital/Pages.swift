@@ -129,7 +129,10 @@ struct NodeScreen: View {
                 default:
                     List {
                         if let access { NodeDetails(id: id, access: access, engine: engine, reload: load) }
-                        ForEach(Array(Self.flat(page.rows).enumerated()), id: \.offset) { OutlineRow(row: $0.element.row, depth: $0.element.depth, number: $0.element.number, reveal: engine.reveal, engine: engine) }
+                        let flat = Self.flat(page.rows)
+                        ForEach(Array(flat.enumerated()), id: \.offset) { i, e in
+                            OutlineRow(row: e.row, depth: e.depth, number: e.number, above: Self.gap(e.row, after: i > 0 ? flat[i - 1].row : nil), reveal: engine.reveal, engine: engine)
+                        }
                     }
                         .listStyle(.plain)
                         .environment(\.defaultMinListRowHeight, 0) // blocks as close as a document's, not the system's 44
@@ -199,6 +202,23 @@ struct NodeScreen: View {
             n = row.block == "numbered" ? n + 1 : 0
             return [(row, depth, row.block == "numbered" ? n : nil)] + flat(row.children ?? [], depth: depth + 1)
         }
+    }
+
+    // The space above a block, as a reading document spaces them (a mockup of this page, 2026-10-25): a heading, or a
+    // line wholly in bold, opens a section and sits close to what it heads; list items sit closer than paragraphs.
+    // Android's Lists.gap the same.
+    static func gap(_ row: Row, after prev: Row?) -> CGFloat {
+        guard let prev else { return 8 }
+        let k = kind(row), p = kind(prev)
+        if k == "heading" { return p == "heading" ? 12 : 22 }
+        if p == "heading" { return 6 }
+        if k == "list" && p == "list" { return 6 }
+        return k == "list" || p == "list" ? 9 : 12
+    }
+    private static func kind(_ r: Row) -> String {
+        let words = (r.segments ?? []).filter { !($0.text ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
+        if r.heading != nil || (!words.isEmpty && words.allSatisfy { $0.marks?.bold == true }) { return "heading" }
+        return r.block == "bullet" || r.block == "numbered" ? "list" : "paragraph"
     }
 }
 
@@ -289,8 +309,9 @@ struct MeetingPage: View {
                     .pickerStyle(.segmented)
                     .listRowSeparator(.hidden)
             }
-            ForEach(Array(NodeScreen.flat(rows).enumerated()), id: \.offset) {
-                OutlineRow(row: $0.element.row, depth: $0.element.depth, number: $0.element.number, reveal: engine.reveal, engine: engine)
+            let flat = NodeScreen.flat(rows)
+            ForEach(Array(flat.enumerated()), id: \.offset) { i, e in
+                OutlineRow(row: e.row, depth: e.depth, number: e.number, above: NodeScreen.gap(e.row, after: i > 0 ? flat[i - 1].row : nil), reveal: engine.reveal, engine: engine)
             }
             if NodeScreen.flat(rows).isEmpty {
                 Text("No notes yet").foregroundStyle(.secondary).listRowSeparator(.hidden)
@@ -329,6 +350,7 @@ struct OutlineRow: View {
     let row: Row
     let depth: Int
     var number: Int? // its place in a numbered list (NodeScreen.flat)
+    var above: CGFloat = 8 // the space over it (NodeScreen.gap)
     var reveal = false
     var engine: Engine? // to fetch an image row's picture
     @Environment(\.openURL) private var openURL
@@ -357,8 +379,8 @@ struct OutlineRow: View {
             .modifier(Blur(hidden: row.sensitive == true && !reveal))
         }
         .padding(.leading, CGFloat(depth) * 22)
-        .padding(.top, row.heading != nil ? 10 : 0)
-        .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 16)) // 8 pt between blocks, as Tana spaces them
+        .padding(.top, above)
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 16))
         .listRowSeparator(.hidden)
         .contentShape(Rectangle())
         .onTapGesture { openURL.zoom(row.reference?.uri) }
