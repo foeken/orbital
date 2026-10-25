@@ -14,6 +14,7 @@ import { definitions, fieldDefinition, parseKey, setFieldText } from '../../sdk/
 import { dateLabel, isDateUri } from '../../sdk/dates';
 import { NOTES_SLOTS, attendees, notesOurs, notesSlotId, writeUpOf } from '../../sdk/events';
 import { canDelete, canWrite, everyoneOnly } from '../../sdk/access';
+import { openable } from './links';
 import { arrange } from './arrange';
 import { listFilter } from './listed';
 import { S, isSpace, iso, today } from '../../main/state';
@@ -88,7 +89,7 @@ function storageId() {
 const newest = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
 // A block Tana's agent wrote can have no id (sdk/content.js assignBlockIds, which the phone does not write): one of its own
 // here, so the row still has one to be drawn by
-const named = (rows, at = 'row') => rows.map((r, i) => ({ ...r, id: r.id || at + '.' + i, children: named(r.children || [], r.id || at + '.' + i) }));
+const named = (rows, at = 'row') => rows.map((r, i) => ({ ...r, id: r.id || at + '.' + i, ...(r.segments ? { segments: r.segments.map(openable) } : {}), children: named(r.children || [], r.id || at + '.' + i) }));
 const listRow = (n) => ({ id: n.id, title: n.title || 'Untitled', ...(secret().has(n.id) ? { sensitive: true } : {}), icon: n.id.split(':')[1], stateType: (n.state && n.state.type) || null, createdAt: iso(n.updateTime) || iso(n.createTime) || null });
 
 // A meeting's page, as the desktop's (renderer/meetingnotes.js, renderer/fields.js attendeesFieldEl), read only here: its
