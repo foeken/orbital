@@ -686,4 +686,4 @@ if (require.main === module) {
     (e) => { console.error('agent relay: the database could not be prepared:', e.message); process.exit(1); });
 }
 
-module.exports = { VERSION, createMcpServer, sqliteStore, postgresStore, d1Store, safePost, TOOLS, EVENTS, LIMITS, TTL, isPublicAddress, network, signature, manualDigest };
+module.exports = { VERSION, createMcpServer, sqliteStore, postgresStore, d1Store, safePost, TOOLS, EVENTS, LIMITS, TTL, isPublicAddress, network, signature, goodSecret, manualDigest };
