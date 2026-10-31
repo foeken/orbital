@@ -51,6 +51,9 @@ module.exports = [
   { name: 'views-unsaved', size: '1000x640', setup: [...library(), { js: "setViewF({ states: ['open'] })" }, { wait: 600 }, { click: '.pill.savesearch' }, { wait: 1400 }, { key: '⌘K' }, { type: 'sort by title' }, { wait: 300 }, { key: '↩' }, { wait: 600 }, { key: 'esc' }, { wait: 700 }], clip: [0, 60, 1000, 380] },
   // an empty page
   { name: 'views-empty', size: '700x500', setup: [{ js: "setView('inbox')" }, { wait: 500 }, { js: "setViewF({ states: ['not_now'] })" }, { wait: 800 }], clip: [0, 60, 700, 260] },
+  { name: 'views-empty-search', size: '700x500', setup: [
+    { js: "tana.setViewFilter('library', { types: null, text: 'Lunar expedition' }).then(() => tana.createSearch('library', 'Lunar expedition')).then((n) => goTo(n.id))" },
+    { wait: 1000 }, { js: 'kids.set(zoom.docId, []); render(true)' }], clip: [240, 60, 460, 400] },
   // saved window views
   { name: 'views-savedview', setup: [...library(), { key: '⌘K' }, { type: 'save view' }, { key: '↩' }, { type: 'Planning' }, { wait: 400 }], clip: card },
 ];

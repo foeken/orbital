@@ -308,7 +308,7 @@ The full contract is [OUTLINER.md](OUTLINER.md). These are the rules a new featu
   toolbar's style menu puts the text selection back instead (`applyBlockType`), so typing goes on. A new row takes the
   caret. With nothing to go back to, focus goes back to the page itself, where ↑/↓ pick up the first or last row.
 - **Empty and loading.** A page with no rows says so in its own words (`.empty-note`; `emptyText` in
-  renderer/render.js): "No notifications yet.", "Nothing matches." with the Quick Add Task key, or "Nothing here yet" with
+  renderer/render.js): "No notifications yet.", "Nothing matches." with the Quick Add Task key only for explicit task-only searches, or "Nothing here yet" with
   Clear filters when a filter hides rows. A new page adds its line to `emptyText`. A palette page with no match says "No
   results". Only a launch or a Reload shows the loading animation (after 300 ms). Later loads wait blank, and a row
   still coming says "Loading…" (`.children.loading`, a `disabled` palette row). A row that cannot run is shown greyed
