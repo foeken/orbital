@@ -243,3 +243,7 @@ query over your meetings. Each of the three is an `orbital:` id the renderer kno
 `appPage: true`), so `goTo`, Back and Recent reach it without asking main for a node.
 
 Settings is not an app page: it is a window of its own (settings.html; docs/OUTLINER.md Settings).
+
+### Excluding types
+
+The `excluding` filter contains built-in view kinds and/or workspace type URIs. The Excluding pill and Cmd+K → Exclude types multi-select them independently of Type; an exclusion wins. `sdk/query.js` applies them to graph nodes after the server limit, distinguishing tasks from plain documents. Saved searches keep `view.excluding` beside `completedWithin`; desktop previews and both phones apply the same helper. Tana itself does not interpret this Orbital view setting.

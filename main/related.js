@@ -3,7 +3,7 @@ const fields = require('../sdk/fields');
 const pins = require('../sdk/pins');
 const { dateUri, isDateUri } = require('../sdk/dates');
 const { openEdgeQuery, openLiveQuery, EDGE_TYPES } = require('../sdk/livequery');
-const { completedInWindow, filterToSearchQuery, liveTrigger, searchQueryParams, validViewFilter } = require('../sdk/query');
+const { excludedType, completedInWindow, filterToSearchQuery, liveTrigger, searchQueryParams, validViewFilter } = require('../sdk/query');
 const { everyoneOnly } = require('../sdk/access');
 const { readSearch, rowLimit } = require('../sdk/node');
 const { NOTES_SLOTS, callOf, notesSlotId, writeUpOf } = require('../sdk/events');
@@ -48,7 +48,7 @@ async function searchChildren(id, page = 'main') {
   // renderer/nodes.js). A newer read that failed decides nothing, so an older one that answered still keeps its rows live.
   // And only for what the search asks now: an older read that answered after a Save asked what came before. That is
   // the query and the two view settings searchRows narrows the answer by (completed window, audience).
-  const asks = (q, v) => JSON.stringify([q, (v || {}).completedWithin, (v || {}).audience, rowLimit((v || {}).limit)]);
+  const asks = (q, v) => JSON.stringify([q, (v || {}).excluding, (v || {}).completedWithin, (v || {}).audience, rowLimit((v || {}).limit)]);
   const same = await op(id, readSearch).then((now) => asks(now.query, now.view) === asks(query, view), () => false);
   if (same && seq > (headRead.get(read) || 0)) {
     headRead.set(read, seq);
@@ -91,7 +91,7 @@ async function searchRows(query, narrow, limit = 200) {
   const scoped = Array.isArray(query.ownerUris) && query.ownerUris.some((u) => typeof u === 'string' && isSpace(u));
   const spaces = scoped ? (await S.client.graph.listNodes({ nodeTypes: ['space'], limit: 1000 })).nodes : [];
   const answered = await S.client.graph.listNodes(searchQueryParams(query, S.me && S.me.userUri, limit, undefined, spaces));
-  let nodes = answered.nodes.filter((n) => completedInWindow(n, narrow.completedWithin));
+  let nodes = answered.nodes.filter((n) => completedInWindow(n, narrow.completedWithin) && !excludedType(n, narrow.excluding));
   if (narrow.audience === 'everyone') nodes = await everyoneOnly(S.client.graph, nodes);
   nodes.forEach(rememberNodeHue);
   await Promise.all([resolveTypes(nodes.map((n) => n.entityType)), resolveMeetings(nodes)]);

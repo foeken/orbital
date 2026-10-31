@@ -13,7 +13,7 @@ module.exports = [
     { js: "const tasks = shownDocs().filter(isTask); for (const n of tasks.slice(0, 3)) { n.createdBy = me().id; taskMetaById.set(n.id, { ...taskMetaById.get(n.id), assignees: [me().id] }); n.stateType = 'open'; } for (const n of tasks.slice(1, 3)) n.pinnedToMeeting = true; render(true)" },
     { wait: 400 }], clip: [0, 30, 1000, 740] },
   // the pills over the Library, for the annotated picture
-  { name: 'views-pills', setup: library(), clip: [0, 96, 1200, 84] },
+  { name: 'views-pills', setup: [...library(), { js: 'renderPills(true)' }], clip: [0, 96, 1200, 84] },
   // the three presets, through Cmd+K
   { name: 'views-presets', video: true, size: '1000x640', setup: library(), clip: [0, 30, 1000, 520], steps: [
     { wait: 500 }, { key: '⌘K' }, { type: 'Types', delay: 90 }, { wait: 300 }, { key: '↩' }, { wait: 1200 },

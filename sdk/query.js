@@ -92,7 +92,7 @@ function assigneeParams(assignee, me) {
 // audience: 'everyone' lists what everyone in the org can see (#253). The graph can only ask Tana's "Open" (restricted:
 // false, which includes whatever a restricted space or meeting holds), so that is the query and access.js
 // everyoneOnly narrows the answer, the way completedWithin is applied after the query.
-const FILTER_KEYS = new Set(['types', 'states', 'assignee', 'text', 'participant', 'window', 'completedWithin', 'fields', 'audience', 'limit']);
+const FILTER_KEYS = new Set(['types', 'excluding', 'states', 'assignee', 'text', 'participant', 'window', 'completedWithin', 'fields', 'audience', 'limit']);
 const { USER_URI: USER, TYPE_URI } = require('./ids');
 // A filter's types may also name the workspace's own types (`tana:type:` uris, #139): every Risk, say. They are sent as
 // entityTypes, which the graph ORs among themselves and ANDs with the kinds (verified live 2026-09-25: Risk 18 +
@@ -128,6 +128,7 @@ function completedInWindow(n, within, now = Date.now()) {
 function validViewFilter(f) {
   return !!f && !Array.isArray(f) && typeof f === 'object' && Object.keys(f).every((k) => FILTER_KEYS.has(k))
     && (f.types === undefined || f.types === null || Array.isArray(f.types) && f.types.every((x) => VIEW_KINDS.includes(x) || TYPE_URI.test(x)))
+    && (f.excluding === undefined || f.excluding === null || Array.isArray(f.excluding) && f.excluding.every((x) => VIEW_KINDS.includes(x) || TYPE_URI.test(x)))
     && (f.states === undefined || f.states === null || Array.isArray(f.states) && f.states.every((x) => STATE_TYPES.includes(x)))
     && (f.assignee === undefined || ['me', 'anyone', 'unassigned'].includes(f.assignee) || USER.test(f.assignee))
     && (f.text === undefined || typeof f.text === 'string')
@@ -140,6 +141,13 @@ function validViewFilter(f) {
     // filterToSearchQuery passes on and attributeFilters cleans the way Tana does
     && (f.fields === undefined || f.fields === null || (typeof f.fields === 'object' && !Array.isArray(f.fields)
       && Object.entries(f.fields).every(([k, v]) => FIELD_KEY.test(k) && !!v && typeof v === 'object' && !Array.isArray(v))));
+}
+// Exclusions are applied after the server limit, like the completed-age filter: GraphService has no NOT selector.
+function excludedType(n, excluding) {
+  if (!Array.isArray(excluding)) return false;
+  const nodeType = String(n.id || '').split(':')[1];
+  const kind = nodeType === 'text' ? (n.state && n.state.type ? 'tasks' : 'docs') : NODE_TYPE_KIND[nodeType];
+  return excluding.includes(kind) || !!n.entityType && excluding.includes(n.entityType);
 }
 const FIELD_KEY = /^tana:type:[0-9a-z]{26}\?attribute=[0-9a-z]+$/;
 // A filter's field values narrow the list to the rows that have them, wherever each field has a pill to show it
@@ -399,4 +407,4 @@ function addMeetingChats(answer) {
   };
 }
 
-module.exports = { addMeetingChats, liveTrigger, parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, searchOwners, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, VIEW_KINDS, KIND_NODE_TYPE, hideRules, isHidden, completedWindow, completedInWindow };
+module.exports = { excludedType, addMeetingChats, liveTrigger, parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, searchOwners, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, VIEW_KINDS, KIND_NODE_TYPE, hideRules, isHidden, completedWindow, completedInWindow };

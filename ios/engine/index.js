@@ -10,7 +10,7 @@ import { insertAfter, insertImage, readOutline } from '../../sdk/content';
 import { initImage, uploadFile } from '../../sdk/assets';
 import { addMessage, chatRows, triggerReply } from '../../sdk/chat';
 import { datePins, pinDate, sidebarTree, unpinDate } from '../../sdk/pins';
-import { completedInWindow, liveTrigger, searchQueryParams, searchQueryToFilter } from '../../sdk/query';
+import { excludedType, completedInWindow, liveTrigger, searchQueryParams, searchQueryToFilter } from '../../sdk/query';
 import { definitions, fieldDefinition, parseKey, setFieldText } from '../../sdk/fields';
 import { dateLabel, isDateUri } from '../../sdk/dates';
 import { NOTES_SLOTS, attendees, notesOurs, notesSlotId, writeUpOf } from '../../sdk/events';
@@ -161,7 +161,7 @@ async function searchRows(doc) {
   const scoped = (query.ownerUris || []).some((u) => typeof u === 'string' && isSpace(u));
   const spaces = scoped ? (await S.client.graph.listNodes({ nodeTypes: ['space'], limit: 1000 })).nodes : [];
   const { nodes = [] } = await S.client.graph.listNodes(searchQueryParams(query, S.me.userUri, rowLimit(view.limit), undefined, spaces));
-  let found = nodes.filter((n) => completedInWindow(n, view.completedWithin));
+  let found = nodes.filter((n) => completedInWindow(n, view.completedWithin) && !excludedType(n, view.excluding));
   if (view.audience === 'everyone') found = await everyoneOnly(S.client.graph, found);
   // arranged as the search was saved: its sort and its sections (arrange.js), with what they are named by
   const types = [...new Set(found.map((n) => n.entityType).filter(Boolean))];
