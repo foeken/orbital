@@ -26,8 +26,8 @@ the same kinds came back PR after PR.
 
 From fastest to slowest. Each catches what the one before it cannot.
 
-1. **`npm run lint` and `npm run check`** (about 20 s together, Node, offline). Offline, but not sandboxed: sdk-check and
-   mcp-server-check listen on a loopback port, which the Codex sandbox refuses (`listen EPERM ... 127.0.0.1`), so an agent runs
+1. **`npm run lint` and `npm run check`** (about 20 s together, Node, offline). Offline, but not sandboxed: sdk-check,
+   mcp-server-check and daemon-check listen on a loopback port, which the Codex sandbox refuses (`listen EPERM ... 127.0.0.1`), so an agent runs
    `npm run check` escalated, as it does `npm run flows`. The SDK against a fake SyncService, `main.js` and every
    `main/` module in one vm with a fake Electron, the renderer's load order, and about a hundred behavior checks that each slice a
    renderer function and run it against a fake DOM. Each guards a bug that happened or a rule a mirror of the code cannot
