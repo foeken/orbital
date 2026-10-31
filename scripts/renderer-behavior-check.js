@@ -2283,6 +2283,7 @@ function runPaletteSkipCheck() {
     const isTypeDoc = (n) => n.id.startsWith('tana:type:'), hotkeys = {}, DEFAULT_HOTKEYS = { createTask: '⇧⌘Space' };
     const typeListCache = [{ uri: 'tana:type:flow', workflow: true }, { uri: 'tana:type:risk', workflow: false }];
     const filters = new Map([['tana:search:mine', { types: ['tasks'] }], ['tana:search:meet', { types: ['meetings'] }],
+      ['tana:search:all', {}], ['tana:search:mixed', { types: ['tasks', 'meetings'] }],
       ['tana:search:flow', { types: ['tana:type:flow'] }], ['tana:search:risk', { types: ['tana:type:flow', 'tana:type:risk'] }]]);
     ${sourceLine('const isTypeId =')}
     ${sourceLine('const isSearchDoc =')}
@@ -2295,6 +2296,8 @@ function runPaletteSkipCheck() {
   assert.match(emptyText.text('orbital:timeline'), /^Nothing yet\./, 'an empty Timeline says what shows up there');
   assert.equal(emptyText.text('tana:search:mine'), 'Nothing matches. ⇧⌘Space creates a task.', 'an empty My Tasks names the key that makes one');
   assert.equal(emptyText.text('tana:search:meet'), 'Nothing matches.', 'a search that lists no tasks does not');
+  assert.equal(emptyText.text('tana:search:all'), 'Nothing matches.', 'an unrestricted search does not suggest creating a task');
+  assert.equal(emptyText.text('tana:search:mixed'), 'Nothing matches.', 'a mixed task and meeting search does not suggest creating a task');
   assert.match(emptyText.text('orbital:agent-chats'), /New chat with ChatGPT starts one/, 'an empty Agent chats page says how to start one');
   assert.match(emptyText.text('orbital:agent-chat:new'), /^Ask ChatGPT anything below/, 'and a new agent chat says where it is kept, not Tana\'s words');
   // a workflow type's documents are tasks, so a search of it alone is a list of tasks: its Status and Assigned to pills show

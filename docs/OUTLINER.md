@@ -1356,7 +1356,7 @@ two of you; a refused invite says why over the open chat (renderer/chat.js `newC
   saved under its id if you replaced it, this one if you removed it. A first launch opens it as two panes.
   On a new account both panes are empty, so an empty page says what would fill it (`emptyText`, renderer/render.js):
   the Timeline what shows up there, Notifications and Proposals that there are none, a saved search or a type's page
-  "Nothing matches.", with the Quick Add Task key after it when the search lists tasks, so an empty My Tasks is where the
+  "Nothing matches.", with the Quick Add Task key after it when the search explicitly lists only task types, so an empty My Tasks is where the
   first task starts. Only a document says "No content".
 - **Windows** (issue #137). File › New Window, ⌃⌘N or Cmd+K New window opens another outliner window 24px down and right
   of the front one, with one page on the place the page that asked was on (`window:new` answers its id). A page's id is

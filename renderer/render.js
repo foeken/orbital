@@ -599,7 +599,8 @@ function emptyText(parent) {
   if (isChatPage(parent)) return isAgentChat(id) ? (agentChatAway(id) ? 'This chat is on another Mac. Open it there, or in the ChatGPT app on that Mac.' : !codexHere() ? 'Chats with ChatGPT need the ChatGPT app on this Mac, signed in.' : 'Ask ChatGPT anything below. The chat is kept in the ChatGPT app on this Mac, and Orbital keeps only its link.') : 'No messages yet. Say something to Tana below.';
   if (!isSearchDoc(parent.node) && !isTypeDoc(parent.node)) return 'No content';
   const filter = filters.get(id), key = hotkeyFor('createTask');
-  return 'Nothing matches.' + (filter && tasksInFilter(filter) && key ? ' ' + key + ' creates a task.' : '');
+  const onlyTasks = filter?.types?.length && filter.types.every((type) => tasksInFilter({ types: [type] }));
+  return 'Nothing matches.' + (onlyTasks && key ? ' ' + key + ' creates a task.' : '');
 }
 
 function resolveZoom() {
