@@ -17,7 +17,7 @@ function pillDefs() {
   // The kinds, then the workspace's own types (#139). The two sets do not mix: ticking one clears the other, since
   // Tasks and Risk together would mean tasks that are risks (sdk/query.js), never what somebody ticking both meant.
   const kindIds = TYPES.filter(Boolean).map((x) => x[0]), kinds = (f.types || []).filter((x) => kindIds.includes(x)), typed = (f.types || []).filter((x) => !kindIds.includes(x));
-  if (typed.length) loadWorkspaceTypes(); // the pill names them
+  if (typed.length || (f.excluding || []).length) loadWorkspaceTypes(); // the pill names them
   const typeName = (uri) => ((typeListCache || []).find((t) => t.uri === uri) || {}).title || '…';
   // A kind page (Tasks, Meetings, Chats, People) is that kind: only the Library and the Inbox pick their kinds.
   // A saved search is never a kind page — choosing what it lists is the whole point of it.
@@ -28,6 +28,14 @@ function pillDefs() {
     ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], keepOpen: true, checked: kinds.includes(t[0]), run: () => save({ types: toggleIn(kindIds, kinds.length ? kinds : null, t[0]), fields: null }) } : { div: true })), // multi-select: the menu stays open to tick more
     ...(typeListCache && typeListCache.length ? [{ head: 'Workspace types' }, ...typeListCache.map((t) => ({ label: t.title || 'Untitled type', icon: typeGlyph(t.uri), keepOpen: true, checked: typed.includes(t.uri), run: () => save({ types: toggleIn(typeListCache.map((x) => x.uri), typed.length ? typed : null, t.uri), fields: null }) }))] : []),
   ]) });
+  if (!onTypePage()) {
+    const excluded = f.excluding || [], toggle = (id) => save({ excluding: excluded.includes(id) ? excluded.filter((x) => x !== id) : [...excluded, id] });
+    defs.push({ id: 'excluding', label: 'Excluding', command: 'Exclude types', icon: 'filter', value: excluded.map((id) => (TYPES.find((t) => t && t[0] === id) || [])[1] || typeName(id)).join(', ') || 'None', rows: () => (loadWorkspaceTypes(), [
+      { label: 'None', reset: true, checked: !excluded.length, run: () => save({ excluding: null }) },
+      ...TYPES.map((t) => t ? { label: t[1], icon: t[2], keepOpen: true, checked: excluded.includes(t[0]), run: () => toggle(t[0]) } : { div: true }),
+      ...(typeListCache && typeListCache.length ? [{ head: 'Workspace types' }, ...typeListCache.map((t) => ({ label: t.title || 'Untitled type', icon: typeGlyph(t.uri), keepOpen: true, checked: excluded.includes(t.uri), run: () => toggle(t.uri) }))] : []),
+    ]) });
+  }
   // Meetings alone: when they take place (#492), Tana's presets, one at a time.
   if (onlyMeetings(f)) defs.push({ id: 'when', label: 'When', command: 'Filter by meeting time', icon: 'calendar', value: whenName(f.window), rows: () => [
     { label: 'Any time', reset: true, checked: !f.window, run: () => save({ window: null }) },

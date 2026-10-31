@@ -1307,6 +1307,21 @@ flow('golden path: group, sort and filter the Library, then save it as a search'
   assert.deepEqual([...await p.js('__screen()')].sort(), offsite, 'the saved search lists what the view showed');
 });
 
+flow('exclude types and keep the exclusion in a saved search', async (p) => {
+  await p.start();
+  await command(p, 'library', 'Library'); await closePalette(p); await settle(p, 400);
+  await p.js("pillDefs().find(d => d.id === 'excluding').rows().find(r => r.label === 'Tasks').run()");
+  await settle(p, 600);
+  assert.equal(await p.js('shownDocs().length'), 0, 'excluding the included kind leaves no rows');
+  await command(p, 'save as', 'Save as new search');
+  await p.waitFor('zoom && String(zoom.docId).startsWith("tana:search:")', 'saved exclusion');
+  await settle(p, 400);
+  assert.deepEqual(await p.js('filters.get(pillKey()).excluding'), ['tasks']);
+  await p.js("pillDefs().find(d => d.id === 'excluding').rows().find(r => r.label === 'None').run()");
+  await settle(p, 600);
+  assert.ok(await p.js('shownDocs().length') > 0, 'clearing exclusions restores the preview');
+});
+
 // 19. Notifications and Proposals (#135 family): a bullet marks one read, Mark all as read the rest, a row opens what
 // it is about; a proposal approved from Cmd+K and one rejected with its button both leave the page
 flow('golden path: read notifications and settle proposals', async (p) => {

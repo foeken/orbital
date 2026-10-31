@@ -163,7 +163,10 @@ async function main() {
     assert.equal(view.sortBy, '-updated', "Orbital's Updated is newest first, which Tana spells -updated");
     assert.deepEqual(view.display, { status: { shown: true, order: 0 }, updated: { shown: true, order: 1 } });
     assert.deepEqual([nodeSdk.searchSort(view.sortBy), nodeSdk.searchDisplay(view.display), nodeSdk.searchDisplay('type,space')], ['updated', ['status', 'updated'], ['type', 'space']]);
+    nodeSdk.setSearchView(d, { excluding: ['tasks', 'tana:type:' + 'a'.repeat(26)] });
+    assert.deepEqual(nodeSdk.readSearch(d).view.excluding, ['tasks', 'tana:type:' + 'a'.repeat(26)], 'saved exclusions round-trip');
     nodeSdk.setSearchView(d, { sortBy: 'title' });
+    assert.equal(nodeSdk.readSearch(d).view.excluding, undefined, 'clearing exclusions removes the stored value');
     assert.equal(d.loro.getMap('view').toJSON().sortBy, 'title', 'A to Z is Tana\'s ascending title');
     assert.deepEqual(nodeSdk.readSearch(d), { query: d.loro.getMap('query').toJSON(), view: { sortBy: 'title' } }, 'readSearch hands back what the two writers stored');
     assert.deepEqual(nodeSdk.readSearch(new Document('tana:search:' + ulid())), { query: {}, view: {} }, 'and an unreadable search reads as an empty query, which searchChildren refuses');
@@ -4608,6 +4611,18 @@ async function main() {
     assert.equal(viewParams({ types: ['docs'], text: ' dpa ' }, ME, 25).limit, 25);
     assert.equal(validViewFilter({ types: ['docs'], states: null, assignee: 'anyone', text: '', participant: null, window: null }), true);
     assert.equal(validViewFilter({ types: ['nope'] }), false);
+    const { excludedType } = require('../sdk/query');
+    const exclusionType = 'tana:type:' + 'a'.repeat(26);
+    assert.equal(validViewFilter({ excluding: ['tasks', exclusionType] }), true);
+    assert.equal(validViewFilter({ excluding: ['nope'] }), false);
+    const excludedTask = { id: 'tana:text:x', state: { type: 'closed' }, entityType: exclusionType };
+    assert.equal(excludedType(excludedTask, ['tasks']), true);
+    assert.equal(excludedType(excludedTask, ['docs']), false);
+    assert.equal(excludedType(excludedTask, [exclusionType]), true);
+    assert.equal(excludedType({ id: 'tana:text:x' }, ['docs']), true);
+    assert.equal(excludedType({ id: 'tana:event:x' }, ['meetings']), true);
+    assert.equal(excludedType(excludedTask, null), false);
+
     assert.equal(validViewFilter({ types: ['tasks'], extra: true }), false);
     // The completed window: how old a completed task may be and still be listed. Whether completed tasks are asked
     // for at all is the Status filter (stateTypes), so this never has an "off" — and the graph has no field to ask

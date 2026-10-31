@@ -358,6 +358,8 @@ function writeSearchView(loro, view = {}) {
     const d = v.setContainer('display', new LoroMap());
     view.display.forEach((key, order) => { const e = d.setContainer(key, new LoroMap()); e.set('shown', true); e.set('order', order); });
   } else if (v.get('display') !== undefined) v.delete('display');
+  if (Array.isArray(view.excluding) && view.excluding.length) v.set('excluding', view.excluding);
+  else if (v.get('excluding') !== undefined) v.delete('excluding');
   if (COMPLETED_WINDOWS.includes(view.completedWithin)) v.set('completedWithin', view.completedWithin);
   else if (v.get('completedWithin') !== undefined) v.delete('completedWithin');
   if (ROW_LIMITS.includes(view.limit)) v.set('limit', view.limit);
