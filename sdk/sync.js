@@ -20,6 +20,11 @@ const FORCED_RECONNECT_MS = 60000; // at most one reconnect a minute for a boots
 const UNAVAILABLE_MS = 60000, UNAVAILABLE_ATTEMPTS = 5;
 
 const code = (e) => ConnectError.from(e).code;
+// Tana's gateway refuses a body over its size limit with a bare HTTP 413, which Connect calls [unknown]. The same bytes
+// would be refused again, so the document is kept read-only (_tooLarge): retried as a transient failure, one 10 MiB
+// catch-up was resent three times a minute, 954 MiB in half an hour (Eirik Hoem, 2026-11-10).
+const tooLarge = (e) => /\bHTTP 413\b/.test(String(e && (e.rawMessage || e.message)));
+const size = (chunks) => chunks.reduce((n, u) => n + u.length, 0);
 const jitter = (initial, max, factor, attempt) => { const n = Math.min(initial * factor ** attempt, max); return n / 2 + (n / 2) * Math.random(); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms).unref?.()); // unref: Node's; a browser's timer is a number (the iPhone engine)
 const timeout = (promise, ms, msg) => new Promise((resolve, reject) => {
@@ -331,7 +336,7 @@ class SyncConnection extends EventEmitter {
   // read access afterwards) but still lets it read. The document stays open with what it has, sends nothing more and is
   // not re-bootstrapped; `document.writeDenied` and the 'write-denied' event let the app show it read-only. A document
   // that was never live has nothing to read yet, so its subscribe fails as before.
-  _denyWrites(entry, err) {
+  _denyWrites(entry, err, reason = 'denied') {
     if (!entry.ready.settled) return this._detach(entry, err);
     const { id, sessionId } = entry;
     this._dropSession(entry);
@@ -341,7 +346,15 @@ class SyncConnection extends EventEmitter {
     entry.document.writeDenied = true;
     this.logger.warn('sync: write denied for ' + id + ', keeping it read-only');
     if (sessionId && this.connected) this._command({ case: 'unsubscribeDocument', value: { documentId: id, sessionId } }).catch(() => {});
-    this._safe(() => this.emit('write-denied', id));
+    this._safe(() => this.emit('write-denied', id, reason));
+  }
+
+  // Tana refused the document's unsent changes as too large (HTTP 413): read-only from here, like a refused write, and
+  // said with its size, so whoever reads the log can tell which document and what made it so big.
+  _tooLarge(entry, bytes) {
+    const err = new Error('Tana refused ' + entry.id + ': ' + (bytes / 1048576).toFixed(1) + ' MB of unsent changes is more than it accepts (HTTP 413)');
+    this.logger.error('sync: ' + err.message + ', not sending it again');
+    this._denyWrites(entry, err, 'too-large');
   }
 
   _resync(entry, reason) {
@@ -452,7 +465,9 @@ class SyncConnection extends EventEmitter {
     try {
       await this._command({ case: 'applyBootstrapUpdates', value: { documentId: id, sessionId, baseServerVv: EMPTY, updates: catchup } }, BOOTSTRAP_MS);
     } catch (e) {
-      if (gen !== entry.gen || code(e) !== Code.PermissionDenied) throw e;
+      if (gen !== entry.gen) throw e;
+      if (tooLarge(e)) { this._tooLarge(entry, catchup.length); return 'denied'; }
+      if (code(e) !== Code.PermissionDenied) throw e;
       this._denyWrites(entry, e); // readable, but the catch-up was refused (§2.2 write-permission-denied)
       return 'denied';
     }
@@ -481,7 +496,7 @@ class SyncConnection extends EventEmitter {
   async _flush(entry) {
     if (entry.inflight || !entry.queue.length || entry.state !== 'live') return;
     const updates = entry.queue.splice(0);
-    if (updates.reduce((n, u) => n + u.length, 0) > OUTBOUND_BUDGET) return this._resync(entry, 'outbound buffer overflow');
+    if (size(updates) > OUTBOUND_BUDGET) return this._resync(entry, 'outbound buffer overflow');
     const { id, sessionId } = entry;
     const send = this._command({ case: 'liveDocumentUpdate', value: { documentId: id, sessionId, updates } });
     entry.inflight = send.then(() => {}, () => {}); // what unsubscribe waits on
@@ -490,6 +505,7 @@ class SyncConnection extends EventEmitter {
     } catch (e) {
       if (entry.sessionId !== sessionId) return;
       const c = code(e);
+      if (tooLarge(e)) return this._tooLarge(entry, size(updates)); // a re-bootstrap would send the same bytes as its catch-up
       // Tana's access-revoked: re-bootstrap to probe read access, ending read-only (_denyWrites) or evicted if not even that.
       if (c === Code.PermissionDenied) { entry.revoked = true; return this._resync(entry, 'write permission denied'); }
       if (c !== Code.Canceled) this._resync(entry, 'live update failed: ' + (e.message || e));

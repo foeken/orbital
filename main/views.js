@@ -268,7 +268,7 @@ async function start() {
   reliveRefs(); // the references on screen, live on the old login's stream, subscribed on this one (#413)
   S.client.sync.on('change', onChange);
   // Tana refused an edit but still lets us read it: say so, and redraw the row, which doc:info now reports read-only.
-  S.client.sync.on('write-denied', (id) => { setStatus({ error: 'Tana refused your edits to this node; it is read-only now' }); send('outline:changed', id, { meta: true }); });
+  S.client.sync.on('write-denied', (id, reason) => { setStatus({ error: reason === 'too-large' ? 'Your changes to this node are too large for Tana to accept; it is read-only now' : 'Tana refused your edits to this node; it is read-only now' }); send('outline:changed', id, { meta: true }); });
   setStatus({ authenticated: true });
   await S.client.sync.connect();
   // The settings document decides before anything is listed: a view's filter, the hidden titles and the MCP switch
