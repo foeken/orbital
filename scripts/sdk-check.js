@@ -7394,7 +7394,7 @@ async function main() {
 
   // 5. Sync lifecycle against an in-process fake SyncService (bootstrap -> live -> updates out/in -> resync -> unsubscribe)
   const Resp2 = message('sync', 'ServerSyncResponse');
-  const server = { frames: [], wake: null, commands: [], serverDoc: new Document(DOC, { peerId: '4242' }), session: 0, created: new Map(), unavailable: new Set(), denied: new Set(), begins: [] };
+  const server = { frames: [], wake: null, commands: [], serverDoc: new Document(DOC, { peerId: '4242' }), session: 0, created: new Map(), unavailable: new Set(), denied: new Set(), tooLarge: new Set(), begins: [] };
   server.serverDoc.applyRemote([snapshot]);
   const push = (json) => { server.frames.push(fromJson(Resp2, json)); if (server.wake) server.wake(); };
   const router = createRouterTransport(({ service }) => service(SyncService, {
@@ -7427,6 +7427,7 @@ async function main() {
           serverVv: b64(sdoc.loro.oplogVersion().encode()), serverUpdates: cold ? b64(sdoc.loro.export({ mode: 'snapshot' })) : '' } });
       }
       if (kind === 'applyBootstrapUpdates') {
+        if (server.tooLarge.has(value.documentId) && value.updates.length) throw new ConnectError('HTTP 413', Code.Unknown); // what Tana's gateway answers
         if (server.denied.has(value.documentId) && value.updates.length) throw new ConnectError('write denied', Code.PermissionDenied);
         if (value.documentId !== DOC && !server.created.has(value.documentId)) { // a create: the catch-up must be a full snapshot of a doc the server never saw
           assert.ok(value.updates.length, 'create sends a non-empty catch-up');
@@ -7439,6 +7440,7 @@ async function main() {
       }
       if (kind === 'liveDocumentUpdate') {
         if (value.sessionId !== 's' + server.session) throw new ConnectError('stale session', Code.FailedPrecondition);
+        if (server.tooLarge.has(value.documentId)) throw new ConnectError('HTTP 413', Code.Unknown);
         if (server.denied.has(value.documentId)) throw new ConnectError('write denied', Code.PermissionDenied);
         (server.created.get(value.documentId) || server.serverDoc).applyRemote(value.updates);
         return {};
@@ -7448,7 +7450,7 @@ async function main() {
     },
   }));
   const warns = [];
-  const log = { warn: (m) => warns.push(m), error: (m) => console.error(m), info: () => {} };
+  const log = { warn: (m) => warns.push(m), error: (m) => (/HTTP 413/.test(m) ? warns.push(m) : console.error(m)), info: () => {} };
   const sync = new SyncConnection({ transport: router, orgId: ORG, peerId, logger: log });
   // The retry and reconnect backoffs (sdk/sync.js jitter: 250 ms to 5 s) run at once here: what this checks is that a
   // retry happens and what it sends, never how long it waited. The watchdog (3 x 50 ms heartbeats) and the fake
@@ -7625,6 +7627,28 @@ async function main() {
   await new Promise((r) => setTimeout(r, 30));
   assert.equal(server.commands.length, sentBefore, 'no further sends');
   assert.equal(readNode(server.created.get(DENIED)).title, 'shared with me');
+  // Too large (Tana's gateway answers HTTP 413): the same bytes would be refused again, so a refused live send is not
+  // re-bootstrapped with them as its catch-up and a refused catch-up is not retried. Resent, one 10 MiB catch-up cost
+  // Tana 954 MiB in half an hour (2026-11-10).
+  const BIG = 'tana:text:' + ulid();
+  const big = await sync.subscribe(BIG, (l) => initDocument(l, 'a big note', ME));
+  const bigIds = []; sync.on('write-denied', (id, reason) => bigIds.push([id, reason]));
+  const bigBegins = (id) => server.begins.filter((x) => x === id).length;
+  server.tooLarge.add(BIG);
+  setTitle(big, 'a huge paste');
+  for (let i = 0; i < 40 && !bigIds.length; i++) await new Promise((r) => setTimeout(r, 50));
+  assert.deepEqual(bigIds, [[BIG, 'too-large']], 'the document is made read-only, and says why');
+  assert.equal(bigBegins(BIG), 1, 'no re-bootstrap sending the same bytes again');
+  assert.equal(big.writeDenied, true);
+  const afterBig = server.commands.length;
+  setTitle(big, 'and more');
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(server.commands.length, afterBig, 'nothing more is sent');
+  assert.ok(warns.some((w) => w.includes(BIG) && /MB of unsent changes/.test(w)), 'the log names the document and its size');
+  const BIGNEW = 'tana:text:' + ulid();
+  server.tooLarge.add(BIGNEW);
+  await assert.rejects(sync.subscribe(BIGNEW, (l) => initDocument(l, 'made too big', ME)), /HTTP 413/);
+  assert.equal(bigBegins(BIGNEW), 1, 'a refused catch-up is not retried');
   // Warm-bootstrap budget (Tana's #J): unavailable is retried while under 60 s or 5 attempts, then the session pauses
   // instead of retrying forever; asking for it again resumes it. The clock jumps 20 s per attempt and the retry sleeps
   // are cut to nothing (the backoff cut above), so this takes milliseconds.
