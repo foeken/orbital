@@ -46,8 +46,9 @@ android_checks() {
   [ -z "$android_sdk" ] || sh scripts/android-release.sh --self-test
 }
 
-# iPhone: the UI tests on this checkout's simulator (name, above), made once on the newest iOS runtime as its first iPhone
-# and reused: two checkouts testing at once on one shared iPhone killed each other's tests ("Test crashed with signal
+# iPhone: the UI tests on this checkout's simulator (name, above), made once on the newest iOS runtime with a one-screen
+# iPhone, as its first such iPhone, and reused. iOS 27.1 brought only the two-screen iPhone Duo, whose second screen the
+# tests never find the Timeline on: every sample test failed at launch. Two checkouts testing at once on one shared iPhone killed each other's tests ("Test crashed with signal
 # kill"). Built once, then tested twice: all but the widgets on two copies of it at once, which Xcode makes for the run
 # and deletes after (three were slower than two, each test waiting on the others), and WidgetTests on the simulator
 # itself, which keeps Orbital installed between runs: a copy is made fresh each run, and a fresh simulator's widget
@@ -58,7 +59,7 @@ android_checks() {
 ios_checks() {
   # Xcode's own components, CoreSimulator among them, come with its first launch; without them no simulator starts
   xcodebuild -checkFirstLaunchStatus || { echo "phones: Xcode needs its first-launch install: sudo xcodebuild -runFirstLaunch"; return 1; }
-  sim=$(xcrun simctl list devices available -j | NAME="$name" node -e "const d=JSON.parse(require('fs').readFileSync(0)).devices; const rt=Object.keys(d).filter(k=>k.includes('iOS')).sort().reverse()[0]; const mine=d[rt].find(x=>x.name===process.env.NAME); console.log(mine ? mine.udid : 'new '+d[rt].find(x=>x.name.startsWith('iPhone')).deviceTypeIdentifier+' '+rt)")
+  sim=$(xcrun simctl list devices available -j | NAME="$name" node -e "const d=JSON.parse(require('fs').readFileSync(0)).devices; const one=(x)=>x.name.startsWith('iPhone')&&!/iPhone-Duo/.test(x.deviceTypeIdentifier); const rt=Object.keys(d).filter(k=>k.includes('iOS')&&d[k].some(one)).sort().reverse()[0]; const mine=Object.values(d).flat().find(x=>x.name===process.env.NAME&&!/iPhone-Duo/.test(x.deviceTypeIdentifier)); console.log(mine ? mine.udid : 'new '+d[rt].find(one).deviceTypeIdentifier+' '+rt)")
   case "$sim" in new\ *) set -- $sim; sim=$(xcrun simctl create "$name" "$2" "$3"); echo "phones: made the simulator $name";; esac
   cd ios
   set -- -project Orbital.xcodeproj -scheme Orbital -destination "platform=iOS Simulator,id=$sim" -derivedDataPath .derived -quiet
