@@ -12,5 +12,5 @@ export JAVA_HOME
 if [ -z "$ANDROID_HOME" ] && [ ! -f android/local.properties ] && [ ! -d "$HOME/Library/Android/sdk" ] && [ -d "$(brew --prefix 2>/dev/null)/share/android-commandlinetools/platforms" ]; then
   export ANDROID_HOME="$(brew --prefix)/share/android-commandlinetools"
 fi
-android_sdk=${ANDROID_HOME:-$(sed -n 's/^sdk\.dir=//p' android/local.properties 2>/dev/null)}
+android_sdk=${ANDROID_HOME:-$(sed -n 's/^sdk\.dir=//p' android/local.properties 2>/dev/null || true)} # no file: sed fails, and set -e ended the script silently
 [ -n "$android_sdk" ] || [ ! -d "$HOME/Library/Android/sdk" ] || android_sdk="$HOME/Library/Android/sdk"
