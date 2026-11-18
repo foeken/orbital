@@ -3,7 +3,7 @@ const fields = require('../sdk/fields');
 const pins = require('../sdk/pins');
 const { dateUri, isDateUri } = require('../sdk/dates');
 const { openEdgeQuery, openLiveQuery, EDGE_TYPES } = require('../sdk/livequery');
-const { excludedType, completedInWindow, filterToSearchQuery, liveTrigger, searchQueryParams, validViewFilter } = require('../sdk/query');
+const { excludedType, listInWindow, filterToSearchQuery, liveTrigger, searchQueryParams, validViewFilter } = require('../sdk/query');
 const { everyoneOnly } = require('../sdk/access');
 const { readSearch, rowLimit } = require('../sdk/node');
 const { NOTES_SLOTS, callOf, notesSlotId, writeUpOf } = require('../sdk/events');
@@ -90,8 +90,8 @@ async function searchPreview(filter) {
 async function searchRows(query, narrow, limit = 200) {
   const scoped = Array.isArray(query.ownerUris) && query.ownerUris.some((u) => typeof u === 'string' && isSpace(u));
   const spaces = scoped ? (await S.client.graph.listNodes({ nodeTypes: ['space'], limit: 1000 })).nodes : [];
-  const answered = await S.client.graph.listNodes(searchQueryParams(query, S.me && S.me.userUri, limit, undefined, spaces));
-  let nodes = answered.nodes.filter((n) => completedInWindow(n, narrow.completedWithin) && !excludedType(n, narrow.excluding));
+  let { nodes } = await listInWindow((p) => S.client.graph.listNodes(p), searchQueryParams(query, S.me && S.me.userUri, limit, undefined, spaces), narrow.completedWithin);
+  nodes = nodes.filter((n) => !excludedType(n, narrow.excluding));
   if (narrow.audience === 'everyone') nodes = await everyoneOnly(S.client.graph, nodes);
   nodes.forEach(rememberNodeHue);
   await Promise.all([resolveTypes(nodes.map((n) => n.entityType)), resolveMeetings(nodes)]);

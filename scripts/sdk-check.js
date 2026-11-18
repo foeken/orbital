@@ -13,7 +13,7 @@ const { readNode, setTitle, setState, workflowStates, taskMeta, setAssignees, se
 const outline = require('../sdk/content');
 const { fetchImage, uploadFile, initImage, UPLOAD_LIMIT } = require('../sdk/assets');
 const { LoroMap, LoroList, LoroText } = require('loro-crdt');
-const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden, completedInWindow, completedWindow } = require('../sdk/query');
+const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden, completedInWindow, completedWindow, listInWindow } = require('../sdk/query');
 const pins = require('../sdk/pins');
 
 const ORG = 'org_01EXAMPLE00000000000000000', DOC = 'tana:text:01exampleh0000000000000000', ME = 'tana:user-profile:01examplei0000000000000000';
@@ -4643,6 +4643,38 @@ async function main() {
     assert.deepEqual([3, 7, 30, 'all', 14, '7', true, null].map((w) => validViewFilter({ completedWithin: w })), [true, true, true, true, false, false, false, false],
       'only the four the pill offers are a valid filter value');
     assert.equal(viewParams({ types: ['tasks'], states: ['closed'], completedWithin: 7 }, ME).limit, 200, 'and the window asks the graph for nothing: there is no request field for it');
+    // ...which is why completed tasks are asked on their own (listInWindow): in one query, tasks completed long ago but
+    // changed lately took the limit, the window then dropped them, and an older open task was never listed (My Tasks).
+    {
+      const at = (d) => new Date(now - d * DAY).toISOString();
+      const graph = [
+        { id: 'tana:text:old1', updateTime: at(0.1), state: { type: 'closed', enteredAt: at(40) } },
+        { id: 'tana:text:old2', updateTime: at(0.2), state: { type: 'closed', enteredAt: at(50) } },
+        { id: 'tana:text:done', updateTime: at(0.5), state: { type: 'closed', enteredAt: at(1) } },
+        { id: 'tana:text:open', updateTime: at(20), state: { type: 'open', enteredAt: at(30) } },
+      ];
+      const asked = [];
+      const list = async (p) => { asked.push(p); const found = graph.filter((n) => p.stateTypes.includes(n.state.type)); return { nodes: found.slice(0, p.limit), totalCount: found.length }; };
+      const params = { nodeTypes: ['text'], stateTypes: ['proposed', 'open', 'closed', 'not_now'], limit: 3, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] };
+      const one = (await list(params)).nodes.filter((n) => completedInWindow(n, 3, now));
+      assert.deepEqual(one.map((n) => n.id), ['tana:text:done'], 'asked in one query, the old completed tasks take the limit and the open task is never listed');
+      asked.length = 0;
+      const split = await listInWindow(list, params, 3, now);
+      assert.deepEqual(split.nodes.map((n) => n.id), ['tana:text:done', 'tana:text:open'], 'asked apart, the open task is listed beside the one completed inside the window, newest change first');
+      assert.deepEqual(asked.map((p) => p.stateTypes), [['proposed', 'open', 'not_now'], ['closed']], 'as two queries, each with the whole limit');
+      assert.equal(split.truncated, false, 'and the completed half left out nothing the window could keep, so the list is whole');
+      asked.length = 0;
+      const tight = await listInWindow(list, { ...params, limit: 1 }, 3, now);
+      assert.deepEqual([tight.nodes.map((n) => n.id), tight.truncated], [['tana:text:open'], true], 'a completed half cut short inside the window still lists the open task, and says the list is not whole');
+      asked.length = 0;
+      assert.deepEqual((await listInWindow(list, params, 'all', now)).nodes.length, 3, 'All has no window to apply: one query, its completed rows are what it shows');
+      await listInWindow(list, { ...params, stateTypes: ['open'] }, 3, now);
+      assert.deepEqual(asked.map((p) => p.stateTypes), [['proposed', 'open', 'closed', 'not_now'], ['open']], 'and so is a list that cannot hold a completed task');
+      asked.length = 0;
+      const flow = { type: 'open', workflowUri: 'tana:workflow:x', workflowStateId: 's' };
+      await listInWindow(list, { ...params, stateSelectors: [{ type: 'closed' }, flow] }, 3, now);
+      assert.deepEqual(asked.map((p) => p.stateSelectors), [[flow], undefined], 'a workflow state stays with the open half, and the completed half asks plain closed');
+    }
     assert.throws(() => viewParams({ types: ['nope'] }, ME), /invalid view filter/);
     // Unticking the last kind must not become an unconstrained query: the graph would answer with images, calls and
     // transcripts, which no view can render and which wedged the app when it tried.
