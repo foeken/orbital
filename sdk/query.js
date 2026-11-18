@@ -129,22 +129,25 @@ function completedInWindow(n, within, now = Date.now()) {
 // query they did: My Tasks' 200 rows went mostly to tasks completed weeks ago and then dropped by the window, and the
 // open tasks past them were never listed. So completed tasks are asked on their own, each half up to the whole limit,
 // newest change first. A task completed inside the window also changed inside it, so it is among them. The halves are
-// merged in the list's order and cut to the limit. `list` is graph.listNodes; the answer holds the window's rows only.
+// merged by update time and cut to the limit. A list Tana ranks itself (a text search) stays one query: its ranking
+// cannot be merged. `list` is graph.listNodes; the answer holds the window's rows only.
 async function listInWindow(list, params, within, now = Date.now()) {
   const days = completedWindow(within), states = params.stateTypes || [];
   // the desktop's listNodes says truncated itself (main/views.js listFilter: its count is from before hidden titles)
   const more = (r) => (r.truncated != null ? !!r.truncated : r.totalCount != null && Number(r.totalCount) > r.nodes.length);
   const keep = (r) => ({ ...r, nodes: (r.nodes || []).filter((n) => completedInWindow(n, days, now)) });
-  if (days === 'all' || !states.includes('closed') || states.length < 2) return keep(await list(params));
+  if (days === 'all' || !states.includes('closed') || states.length < 2 || !byUpdateTime(params)) return keep(await list(params));
   const open = { ...params, stateTypes: states.filter((s) => s !== 'closed') }, closed = { ...params, stateTypes: ['closed'] };
   if (params.stateSelectors) open.stateSelectors = params.stateSelectors.filter((s) => s.type !== 'closed');
   delete closed.stateSelectors;
   const [a, b] = (await Promise.all([list(open), list(closed)])).map((r) => ({ ...r, nodes: r.nodes || [] }));
-  const last = b.nodes.at(-1); // the completed half left something out that matters only if it could still be in the window
-  const closedCut = more(b) && !!last && Date.parse(last.updateTime) >= now - days * 864e5;
+  // the completed half left out something that matters unless its last row shows the rest changed before the window
+  // (no last row: listNodes dropped hidden ones after counting, so nothing shows that)
+  const last = b.nodes.at(-1);
+  const closedCut = more(b) && !(last && Date.parse(last.updateTime) < now - days * 864e5);
   const seen = new Set(a.nodes.map((n) => n.id));
   let nodes = keep(a).nodes.concat(keep(b).nodes.filter((n) => !seen.has(n.id)));
-  if (byUpdateTime(params)) nodes.sort((x, y) => (Date.parse(y.updateTime) || 0) - (Date.parse(x.updateTime) || 0));
+  nodes.sort((x, y) => (Date.parse(y.updateTime) || 0) - (Date.parse(x.updateTime) || 0));
   const cut = !!params.limit && nodes.length > params.limit;
   if (cut) nodes = nodes.slice(0, params.limit);
   return { ...a, nodes, totalCount: undefined, truncated: more(a) || closedCut || cut };

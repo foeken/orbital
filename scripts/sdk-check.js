@@ -4669,7 +4669,11 @@ async function main() {
       asked.length = 0;
       assert.deepEqual((await listInWindow(list, params, 'all', now)).nodes.length, 3, 'All has no window to apply: one query, its completed rows are what it shows');
       await listInWindow(list, { ...params, stateTypes: ['open'] }, 3, now);
-      assert.deepEqual(asked.map((p) => p.stateTypes), [['proposed', 'open', 'closed', 'not_now'], ['open']], 'and so is a list that cannot hold a completed task');
+      await listInWindow(list, { ...params, sortOptions: undefined, textQuery: 'q4' }, 3, now);
+      assert.deepEqual(asked.map((p) => p.stateTypes), [['proposed', 'open', 'closed', 'not_now'], ['open'], ['proposed', 'open', 'closed', 'not_now']],
+        'and so is a list that cannot hold a completed task, and a text search, whose ranking by Tana cannot be merged');
+      const hidden = await listInWindow(async (p) => (p.stateTypes[0] === 'closed' ? { nodes: [], truncated: true } : { nodes: [], truncated: false }), params, 3, now);
+      assert.equal(hidden.truncated, true, 'a completed half that was cut, its rows then all hidden, still says the list is not whole');
       asked.length = 0;
       const flow = { type: 'open', workflowUri: 'tana:workflow:x', workflowStateId: 's' };
       await listInWindow(list, { ...params, stateSelectors: [{ type: 'closed' }, flow] }, 3, now);
