@@ -4,7 +4,7 @@ const path = require('node:path');
 const { peerIdentity } = require('../tana-session');
 const { createTanaClient, takeCalls } = require('../sdk');
 const { everyoneOnly } = require('../sdk/access');
-const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, excludedType, completedInWindow, completedWindow, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden, addMeetingChats } = require('../sdk/query');
+const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, excludedType, listInWindow, completedWindow, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden, addMeetingChats } = require('../sdk/query');
 const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView, rowLimit } = require('../sdk/node');
 const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, inboxFrom, handedAt, isDeleted, isMcp, memberTitle, now, pageOf, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveMeetings, resolveTypes, toNode, typesByTitle } = require('./rows');
@@ -43,12 +43,12 @@ async function viewRows(id, filter) {
   if (!S.client) return { nodes: [], truncated: false };
   const f = effectiveFilter(id, filter);
   if (!validViewFilter(f)) throw new Error('invalid view filter');
-  const result = await S.client.graph.listNodes(viewParams(f, S.me.userUri, undefined, await workflowTypes(f.types || [])));
+  // the completed window (sdk/query.js): the graph has no field to ask it for, so it is applied to the answer
+  const result = await listInWindow((p) => S.client.graph.listNodes(p), viewParams(f, S.me.userUri, undefined, await workflowTypes(f.types || [])), f.completedWithin);
   const docsWithoutTasks = Array.isArray(f.types) && f.types.includes('docs') && !f.types.includes('tasks');
   const rules = hiddenRules();
   let nodes = result.nodes.filter((n) => !(docsWithoutTasks && idKind(n.id) === 'text' && n.state && n.state.type))
-    // the completed window (sdk/query.js): the graph has no field to ask it for, so it is applied to the answer
-    .filter((n) => completedInWindow(n, f.completedWithin) && !excludedType(n, f.excluding))
+    .filter((n) => !excludedType(n, f.excluding))
     .filter((n) => !isHidden(memberTitle(n), rules));
   if (f.audience === 'everyone') nodes = await everyoneOnly(S.client.graph, nodes);
   nodes.forEach(rememberNodeHue);

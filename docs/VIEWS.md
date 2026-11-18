@@ -70,13 +70,16 @@ One `graph.listNodes` call per fetch, built by `viewParams(filter, meUri, limit)
   when `text`; `hasParticipantUris` when `participant`; `eventStartTimeMin/Max` when `window` and meetings are the only kind.
 - `completedWithin` is asked for **nowhere**: `ListNodesRequest` has no field for the age of a state
   (checked against the descriptors — there is `event_start_time_min/max` and nothing for `state.entered_at`,
-  and no sort field for it either). It is applied to the answer instead, in `viewRows`, `searchChildren` and
-  `searchPreview`, by `completedInWindow` (sdk/query.js) reading each node's `state.enteredAt` — the time the
+  and no sort field for it either). It is applied to the answer instead, in `viewRows`, `searchChildren`,
+  `searchPreview` and the phones' saved searches, by `listInWindow` and `completedInWindow` (sdk/query.js) reading each node's `state.enteredAt` — the time the
   task entered the state it is in, which for a closed one is when it was completed, and which the index carries
   on every node it lists. The window is rolling and absolute (exactly N×24h back from now), the boundary is
   inclusive, and a completed task with no readable `enteredAt` is left out of 7/30 and kept by All.
-  **Consequence:** the limit applies before the window, so a graph answer full of old completed tasks can come
-  back thin. A saved search stores its window in its `view` map beside the sort and grouping, never inside
+  Because the limit applies before the window, a list that asks for completed tasks beside others asks for them
+  in a query of their own (`listInWindow`): in one query, tasks completed weeks ago but changed lately took the
+  limit and the window then dropped them, so My Tasks listed about 75 open tasks of 200 rows and lost the older
+  ones. Each half gets the whole limit, newest change first (a task completed inside the window also changed inside
+  it), and the merge is cut to the limit. A saved search stores its window in its `view` map beside the sort and grouping, never inside
   Tana's query vocabulary.
 - `sortOptions`: when meetings are the only kind, event start, soonest first for Upcoming and Today and latest first
   otherwise (Tana's own order, which the limit then cuts at the far end); else update time descending.
